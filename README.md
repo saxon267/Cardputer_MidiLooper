@@ -2,7 +2,8 @@
 
 240×135、Gruvbox Dark 的四通道 MIDI 循环叠录固件。Cardputer-Adv 作为 **USB-C Host** 直连 M-VAVE FM-1（Sloop），把 FM-1 的 CH1/2/3/10 录成循环，叠录后回放给 FM-1 发声。
 
-> **状态 v0.1.0**：用户已上机确认可用；UI/逻辑测试与 PlatformIO 编译通过。本轮新增 `.mid` 文件载入播放与 per-lane Mute。
+> **状态 v1.0.0**：用户已上机确认可用；UI/逻辑测试与 PlatformIO 编译通过。包含 `.mid` 文件载入播放、per-lane Mute、Quantize、Swing、Undo。  
+> **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.0.0>
 
 ![LOOP 播放](docs/ui/loop-play.png)
 
