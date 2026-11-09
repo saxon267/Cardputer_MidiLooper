@@ -22,6 +22,7 @@ void LoopEngine::begin()
     _swing = 50;
     _gen = 1;
     _undoTop = 0;
+    for (int i = 0; i < 4; ++i) _mute[i] = false;
 }
 
 void LoopEngine::setQuantize(uint8_t q)
@@ -260,6 +261,60 @@ void LoopEngine::clear()
     portEXIT_CRITICAL(&_mux);
 }
 
+bool LoopEngine::loadCommit(int n, uint16_t bars)
+{
+    if (n <= 0 || n > MAX_LOOP_EVENTS) return false;
+    if (bars < 1) bars = 1;
+    if (bars > LOOP_MAX_BARS) bars = LOOP_MAX_BARS;
+
+    portENTER_CRITICAL(&_mux);
+    _inactiveN = n;
+    for (int i = 0; i < n; ++i) _inactive[i].type &= 0x0F;
+
+    qsort(_inactive, (size_t)n, sizeof(LoopEvent), cmpEvent);
+    const uint32_t len = (uint32_t)bars * LOOP_BEATS * LOOP_PPQN;
+    for (int i = 0; i < n; ++i) {
+        if (_inactive[i].tick >= len) _inactive[i].tick = len - 1;
+    }
+
+    _bars = bars;
+    swapBuffers();
+    _phaseQ16 = 0;
+    _phaseTick = 0;
+    _idx = 0;
+    _state = LoopState::STOP;
+    _overdub = false;
+    _armed = false;
+    _takeN = 0;
+    _autoStop = false;
+    _takeFull = false;
+    _overflow = false;
+    _startPulse = false;
+    _gen = 1;
+    _undoTop = 0;
+    __sync_synchronize();
+    ++_activeGen;
+    portEXIT_CRITICAL(&_mux);
+    return true;
+}
+
+void LoopEngine::setMute(uint8_t lane, bool on)
+{
+    if (lane < 4) _mute[lane] = on;
+}
+
+bool LoopEngine::mute(uint8_t lane) const
+{
+    return lane < 4 && _mute[lane];
+}
+
+bool LoopEngine::toggleMute(uint8_t lane)
+{
+    if (lane >= 4) return false;
+    _mute[lane] = !_mute[lane];
+    return _mute[lane];
+}
+
 void LoopEngine::service()
 {
     if (_state == LoopState::ARMED) {
@@ -383,7 +438,8 @@ uint8_t LoopEngine::pump(uint32_t frames)
     if (q >= lenQ) {
         // The tail may still be held back by swing; flush it at the boundary.
         while (_idx < n) {
-            emit(act[_idx]);
+            const int lane = laneOfChannel(act[_idx].ch);
+            if (lane < 0 || !_mute[lane]) emit(act[_idx]);
             ++_idx;
         }
         _idx = 0;
@@ -405,7 +461,8 @@ uint8_t LoopEngine::pump(uint32_t frames)
         uint32_t due = act[_idx].tick + swingOffsetTicks(act[_idx].tick);
         if (due >= len) due = len - 1;   // never schedule past the loop end
         if (due > tick) break;
-        emit(act[_idx]);
+        const int lane = laneOfChannel(act[_idx].ch);
+        if (lane < 0 || !_mute[lane]) emit(act[_idx]);
         ++_idx;
     }
     return _beatFlags;

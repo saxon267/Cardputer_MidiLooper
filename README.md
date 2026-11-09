@@ -2,7 +2,7 @@
 
 240×135、Gruvbox Dark 的四通道 MIDI 循环叠录固件。Cardputer-Adv 作为 **USB-C Host** 直连 M-VAVE FM-1（Sloop），把 FM-1 的 CH1/2/3/10 录成循环，叠录后回放给 FM-1 发声。
 
-> **状态 v0.1.0**：UI 预览与固件 MVP 已完成，PlatformIO 编译通过（RAM 63.8%，Flash 21.4%），合并镜像已生成；**尚未在真机上逐项验收**。USB Host 枚举 / FM-1 全双工仍是实验路径，第一次上机先看第 6 节。
+> **状态 v0.1.0**：用户已上机确认可用；UI/逻辑测试与 PlatformIO 编译通过。本轮新增 `.mid` 文件载入播放与 per-lane Mute。
 
 ![LOOP 播放](docs/ui/loop-play.png)
 
@@ -18,6 +18,8 @@
 | Quantize | `onMidi()` 入口把 tick 吸附到 OFF / 1/4 / 1/8 / 1/16 / 1/32 网格（默认 1/16） |
 | Swing | 50–75%；播放时对奇数 8 分格的事件动态加 tick 偏移，不改存储 |
 | Undo | `U` 撤销最后一次叠录；按 take generation 过滤，不会误删旧事件 |
+| 文件播放 | FILE 页 `Enter` 载入 `/MidiLoop` 里的 `.mid`，按文件 tempo/bars 播放 |
+| Mute | `Fn` + `1..4` 切换 CH1/2/3/10 静音；播放跳过该 lane，并 allNotesOff 防挂音 |
 | 通道 | CH1 LEAD / CH2 PAD / CH3 BASS / CH10 DRUM，四 lane 同长度 |
 | 节拍器 | 本地 I2S click（2 kHz 重音 / 1.35 kHz 普通）；录音/播放可开关；首录可选 4 拍 count-in |
 | 走带 | Enter 播放/停止；停止时 panic（显式 Note Off + CC64/121/123/120） |
@@ -80,7 +82,7 @@ FILE 页：`/MIDILOOP` 路径、文件数、6 行列表（文件名 + 大小）�
 
 ### 3.1 Web 逻辑自检
 
-[web/test.html](<web/test.html>) 直接跑 **14 个场景**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤、early stop、8192 容量、停止/清空、ARMED 超时、拍点、Quantize、Swing、Undo。当前结果 **ALL PASS**。
+[web/test.html](<web/test.html>) 直接跑 **16 个场景**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤、early stop、8192 容量、停止/清空、ARMED 超时、拍点、Quantize、Swing、Undo、Mute、文件载入。当前结果 **ALL PASS**。
 
 ![Web logic tests](docs/ui/logic-tests.png)
 
@@ -91,7 +93,7 @@ node web/test/run-node.js
 # RESULT OK
 ```
 
-`pwsh tools/web-smoke.ps1` 会启动 headless Edge，通过 CDP 真实点击/按键走一遍交互流程（count-in → REC → 自动停 → OVERDUB → UNDO → SAVE → CLEAR → early stop → BARS 保护），当前 **19 项检查全通过**。
+`pwsh tools/web-smoke.ps1` 会启动 headless Edge，通过 CDP 真实点击/按键走一遍交互流程（count-in → REC → 自动停 → MUTE → OVERDUB → UNDO → SAVE → CLEAR → early stop → BARS 保护），当前 **21 项检查全通过**。
 
 > 这验证的是 Web 模型（`web/engine.js`）与 UI 交互契约；固件侧的 C++ 实现对同一组场景另有 host test（第 9 节）。两者都通过，但仍**不能替代** USB/ES8311/SD 的真机验证。
 
@@ -106,8 +108,9 @@ node web/test/run-node.js
 | `R` / `Space` | 录音 / 停止录音；已有循环时进入叠录 |
 | `Enter` | 播放 / 停止 |
 | `S` | 保存为 `/MidiLoop/LOOP_xxxx.MID`（会先停止播放） |
-| `C` | 清空循环 |
+| `C` | 清空当前轨道（**不删除** `.mid` 文件） |
 | `U` | 撤销最后一次叠录（叠录中按 U 取消当前 take） |
+| `Fn` + `1` / `2` / `3` / `4` | Mute / Unmute CH1 / CH2 / CH3 / CH10 |
 | `M` | 节拍器开 / 关 |
 | `G` | 打开设置浮层 |
 | `Tab` | 切到 FILE |
@@ -126,7 +129,7 @@ node web/test/run-node.js
 | `;` / `.` | 上 / 下选择文件 |
 | `D` | 删除（`Enter` 确认，`Bksp` / `D` 取消） |
 | `N` | 改名（直接键入；`Enter` 确认，`Bksp` 退格，`Tab` 取消） |
-| `Enter` | 提示可用操作（v0.1 还没有文件载入） |
+| `Enter` | 载入选中的 `.mid` 并播放（按文件 tempo/bars） |
 | `Tab` / `Bksp` | 回到 LOOP |
 
 ### 设置浮层
@@ -155,6 +158,8 @@ node web/test/run-node.js
 9. **Quantize**：默认 `1/16`（120 ticks），在 `onMidi()` 入口吸附；可选 OFF / 1/4 / 1/8 / 1/16 / 1/32。首音 tick 0 不变。
 10. **Swing**：默认 50（直拍）；50–75% 时只对奇数 8 分格的事件在发送前加偏移（66% ≈ 76 ticks），存储的 tick 不变，保存的 MIDI 也是直拍。
 11. **Undo**：每次进入叠录取一个 take generation；`U` 过滤掉该 generation 的事件。因为叠录是排序合并，不能简单按数量截断，否则会误删旧事件。
+12. **文件播放**：FILE 页 `Enter` 读取 SMF（Format 0/1、480 PPQN 转换、tempo、EOT），载入 inactive buffer 后提交并播放；`C` 只清 RAM 轨道，`.mid` 文件保留。
+13. **Mute**：`Fn` + `1..4` 切换；pump 跳过该 lane 的事件，并在静音瞬间对该通道发 `allNotesOff`，避免正在响的音挂住。Mute 只影响回放，保存仍包含全部事件。
 
 ---
 
@@ -171,7 +176,7 @@ node web/test/run-node.js
 
 v0.1 **以 Cardputer 内部 BPM 为主**，不解析 FA/FB/FC，也不和 FM-1 sequencer 锁第 1 小节。要边跑 FM-1 sequencer 边 loop，请手动设成同一 BPM，并接受没有小节相位锁定。
 
-> 真机第一件事：确认 USB 状态变绿、按 `R` 能进入 `REC`、FM-1 键盘有声音；再检查 `ARP/HOLD` 和 Sloop 的 thru 行为。
+> 换 FM-1 或改动 Sloop 设置时先确认：USB 状态变绿、按 `R` 能进入 `REC`、FM-1 键盘有声音；再检查 `ARP/HOLD` 和 Sloop 的 thru 行为。
 
 ---
 
@@ -212,8 +217,8 @@ firmware/src/
 
 | 项 | 值 |
 |---|---:|
-| 静态 RAM | 209,052 B / 327,680 B（63.8%） |
-| Flash | 674,057 B / 3,145,728 B（21.4%） |
+| 静态 RAM | 209,060 B / 327,680 B（63.8%） |
+| Flash | 677,897 B / 3,145,728 B（21.5%） |
 | 循环事件 | 2 × 8192 × 8 B + 4096 × 8 B = 160 KB |
 | UI sprite | 240 × 135 × 16 bpp = 64.8 KB（堆） |
 | 音频 | 44.1 kHz / 64 帧块 / 6 DMA |
@@ -244,24 +249,24 @@ test_loop.exe
 
 覆盖：
 
-- **loop engine**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤/lane 映射、early stop、8192 容量、停止/清空、ARMED 超时、拍点、Quantize、Swing、Undo（含排序合并后的 generation 过滤）。
-- **SMF writer**（`test_store.cpp` + fake `SD.h`）：MThd/MTrk、division 480、time signature 4/4、tempo、track name、事件 delta、EOT、`MTrk` 长度字段。**这个测试实际抓到并修掉了一个 track length 多 4 字节的 bug。**
+- **loop engine**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤/lane 映射、early stop、8192 容量、停止/清空、ARMED 超时、拍点、Quantize、Swing、Undo（含排序合并后的 generation 过滤）、Mute、loadCommit。
+- **SMF writer/reader**（`test_store.cpp` + fake `SD.h`）：MThd/MTrk、division 480、time signature 4/4、tempo、track name、事件 delta、EOT、`MTrk` 长度字段、save→load 往返。**这个测试实际抓到并修掉了 track length 多 4 字节、tempo 少 10 倍的 bug。**
 
 `test/host/Arduino.h` 和 `test/host/SD.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现、内存 SD），**不测试** USB、ES8311 和真机时序；同一组场景的 Web 版本见第 3.1 节。
 
 ## 10. 已知限制（v0.1 诚实列表）
 
-1. **没有真机验收**：USB 枚举、全双工、ES8311 click、SD 长时读写都只过了编译；第一次上机按第 6 节逐项确认。
-2. **USB Host 是实验路径**：FM-1 是 USB MIDI + Audio 复合设备，描述符 >256 B 可能枚举失败；host build 没有 USB-CDC 串口。
-3. **不同步 FM-1 sequencer 的小节相位**：不解析 FA/FB/FC；只支持内部 BPM 为主。要同步需后续加 transport + Sloop 外部时钟。
-4. **容量**：8192 事件；32 小节 32 分单音刚好，16 分 4 音和弦 4 lane 会截断（`TAKE FULL` / 丢事件）。
-5. **叠录一次只叠一条 lane**：staging 4096；第一次录音可以四通道一起录（FM-1 sequencer）。
-6. **没有文件载入**：FILE 页只删除/改名，保存的 `.MID` 不能在固件里重新载入播放。
-7. **没有 per-lane mute/solo、自定义量化网格、三连音 swing**；Undo 栈保留最近 8 次叠录，超过后旧的 take 不再可撤销。
-8. **Quantize 对 note-on/off 都生效**：极短音符的 on/off 可能被压到同一 tick（当前没有最小长度保护）；**Swing 只作用于精确 8 分格**，不做 16 分/三连音 swing。
+1. **USB Host 已上机确认**；不同 FM-1 批次/描述符仍可能有枚举差异，换设备时先看顶栏 USB 状态。
+2. **不同步 FM-1 sequencer 的小节相位**：不解析 FA/FB/FC；只支持内部 BPM 为主。要同步需后续加 transport + Sloop 外部时钟。
+3. **容量**：8192 事件；32 小节 32 分单音刚好，16 分 4 音和弦 4 lane 会截断（`TAKE FULL` / 丢事件）。
+4. **叠录一次只叠一条 lane**：staging 4096；第一次录音可以四通道一起录（FM-1 sequencer）。
+5. **文件载入**：只支持 SMF Format 0/1、非 SMPTE；超过 32 小节或 8192 事件会拒绝/截断；载入只进 RAM，`C` 不会删除文件。
+6. **没有 solo、自定义量化网格、三连音 swing**；Undo 栈保留最近 8 次叠录，超过后旧的 take 不再可撤销。
+7. **Quantize 对 note-on/off 都生效**：极短音符的 on/off 可能被压到同一 tick（当前没有最小长度保护）；**Swing 只作用于精确 8 分格**，不做 16 分/三连音 swing。
 8. **count-in 只作用于第一次录音**；叠录立即开始。
 9. **Sloop HOLD**：`ARP 2 → HOLD` 必须 OFF，否则停止后挂音；这是 Sloop 侧设置。
 10. **不发送 Program Change / SysEx**；只录 Note/CC64/CC1/PB。
+11. **旧版文件 tempo**：v0.1 旧构建保存的 `.mid` tempo 可能只有正确值的 1/10；本轮已修 writer，载入时对 `tempo < 150000` 做 ×10 兼容，仍建议用新固件重新保存一次。
 
 ---
 

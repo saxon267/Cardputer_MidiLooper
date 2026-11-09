@@ -58,12 +58,12 @@ int main()
     CHECK(g_sd_buf[26] == 0x04 && g_sd_buf[27] == 0x02 &&
           g_sd_buf[28] == 0x18 && g_sd_buf[29] == 0x08);
 
-    // Tempo at 30: 60e6 / 1200 = 50000 us = 0x00C350.
+    // Tempo at 30: 600e6 / 1200 = 500000 us = 0x07A120.
     CHECK(g_sd_buf[30] == 0x00 && g_sd_buf[31] == 0xFF &&
           g_sd_buf[32] == 0x51 && g_sd_buf[33] == 0x03);
     const uint32_t tempo = ((uint32_t)g_sd_buf[34] << 16) |
                            ((uint32_t)g_sd_buf[35] << 8) | g_sd_buf[36];
-    CHECK(tempo == 50000);                                // 120 BPM
+    CHECK(tempo == 500000);                               // 120 BPM
 
     CHECK(g_sd_buf[37] == 0x00 && g_sd_buf[38] == 0xFF &&
           g_sd_buf[39] == 0x03 && g_sd_buf[40] == 11);
@@ -80,6 +80,19 @@ int main()
     // EOT at 61: delta 6720 (0xB4 0x40) + FF 2F 00.
     CHECK(g_sd_buf[61] == 0xB4 && g_sd_buf[62] == 0x40 &&
           g_sd_buf[63] == 0xFF && g_sd_buf[64] == 0x2F && g_sd_buf[65] == 0x00);
+
+    // Round-trip: the writer output must load back with the same ticks/tempo.
+    LoopEvent loaded[8] = {};
+    int ln = 0;
+    LoopStore::LoadInfo li;
+    CHECK(loopStore.load(path, loaded, 8, ln, li));
+    CHECK(ln == 2);
+    CHECK(li.bars == 4);
+    CHECK(li.bpmX10 == 1200);
+    CHECK(loaded[0].tick == 0);
+    CHECK(LoopEngine::typeOf(loaded[0]) == LE_NOTE_ON);
+    CHECK(loaded[1].tick == 960);
+    CHECK(LoopEngine::typeOf(loaded[1]) == LE_NOTE_OFF);
 
     if (g_fail) {
         printf("RESULT FAIL (%d)\n", g_fail);

@@ -334,6 +334,46 @@
       eq(e.count(), 2);
     });
 
+    test('mute silences only the selected lane', () => {
+      const e = fresh(1, 1200);
+      e.setQuantize(QuantizeGrid.OFF);
+      e.startFirst();
+      e.onMidi(0x90, 60, 100, 0);          // CH1 tick 0
+      e.onMidi(0x91, 64, 100, 500000);     // CH2 tick 480
+      e.stopRecord();
+      eq(e.count(), 2);
+
+      assert(e.toggleMute(0), 'mute CH1');
+      assert(e.mute(0));
+      const hits = [];
+      e.onEvent = ev => hits.push(ev.ch);
+      e.play();
+      for (let i = 0; i < 400; ++i) block(e, 1);
+
+      assert(hits.length === 1, 'only CH2 emitted, got ' + hits.length);
+      eq(hits[0], 1);
+
+      // Unmute and replay from 0: CH1 comes back.
+      e.toggleMute(0);
+      e.play();
+      hits.length = 0;
+      for (let i = 0; i < 400; ++i) block(e, 1);
+      eq(hits.length, 2);
+    });
+
+    test('load replaces the active pattern', () => {
+      const e = fresh(1, 1200);
+      const ev = [
+        { tick: 0,   type: LoopEventType.NOTE_ON, d1: 60, d2: 100, ch: 0 },
+        { tick: 240, type: LoopEventType.NOTE_ON, d1: 64, d2: 100, ch: 1 },
+      ];
+      assert(e.load(ev, 4), 'load');
+      eq(e.count(), 2);
+      eq(e.bars, 4);
+      eq(e.state, LoopState.STOP);
+      eq(e.events[1].tick, 240);
+    });
+
     return results;
   }
 

@@ -55,6 +55,15 @@ public:
     bool undo();
     void service();                 // main task: finish auto-stop / arm timeout
 
+    // Load a parsed file through the inactive buffer, then commit/swap it.
+    LoopEvent* loadBuffer() { return _inactive; }
+    int        loadCapacity() const { return MAX_LOOP_EVENTS; }
+    bool       loadCommit(int n, uint16_t bars);
+
+    void setMute(uint8_t lane, bool on);
+    bool mute(uint8_t lane) const;
+    bool toggleMute(uint8_t lane);
+
     void onMidi(uint8_t status, uint8_t d1, uint8_t d2, uint32_t nowUs);
     uint8_t pump(uint32_t frames);  // audio task: advance clock + dispatch
 
@@ -126,6 +135,7 @@ private:
     uint8_t  _quantize = Q_1_16;
     uint8_t  _swing    = 50;
     uint8_t  _gen      = 1;
+    volatile bool _mute[4] = {false, false, false, false};
 
     UndoEntry _undo[8] = {};
     uint8_t   _undoTop = 0;

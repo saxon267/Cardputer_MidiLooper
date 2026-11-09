@@ -149,7 +149,7 @@ static void clearLoop()
     looper.clear();
     usbMidi.panic();
     app.countInLeft = 0;
-    setToast("CLEARED");
+    setToast("TRACK CLEARED");
 }
 
 static void saveLoop()
@@ -190,6 +190,58 @@ static void deleteSelected()
     }
     refreshLibrary();
     setToast("DELETED");
+}
+
+// ---------------------------------------------------------------- load / mute
+static const uint8_t kLaneCh[4] = {0, 1, 2, 9};
+
+static void toggleLaneMute(uint8_t lane)
+{
+    if (lane > 3) return;
+    const bool muted = looper.toggleMute(lane);
+    if (muted) usbMidi.allNotesOff(kLaneCh[lane]);
+    char b[16];
+    snprintf(b, sizeof(b), "CH%d %s", lane == 3 ? 10 : (int)lane + 1,
+             muted ? "MUTE" : "ON");
+    setToast(b);
+}
+
+static void loadSelected()
+{
+    if (!app.sdOk || app.sel < 0 || app.sel >= library.count()) {
+        setToast("NO FILE");
+        return;
+    }
+
+    // The parser writes into the inactive buffer; finish any take first so it
+    // is not being written while we parse.
+    if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
+        looper.stopRecord();
+    }
+
+    LoopEvent* buf = looper.loadBuffer();
+    int n = 0;
+    LoopStore::LoadInfo info;
+    if (!loopStore.load(library.at(app.sel).path, buf, looper.loadCapacity(), n, info)) {
+        setToast("LOAD FAIL");
+        return;
+    }
+
+    looper.stop();
+    usbMidi.panic();
+    if (!looper.loadCommit(n, info.bars)) {
+        setToast("LOAD FAIL");
+        return;
+    }
+
+    app.bars = info.bars;
+    app.bpmX10 = info.bpmX10;
+    looper.setBpm(app.bpmX10);
+    app.countInLeft = 0;
+    app.screen = Screen::LOOP;
+    looper.play();
+    syncApp();
+    setToast("PLAY");
 }
 
 // ---------------------------------------------------------------- rename
@@ -368,6 +420,7 @@ static void handleKeys()
     static bool pUp = false, pDown = false, pLeft = false, pRight = false;
     static bool pR = false, pS = false, pM = false, pG = false, pC = false;
     static bool pD = false, pN = false, pMinus = false, pPlus = false, pU = false;
+    static bool pD1 = false, pD2 = false, pD3 = false, pD4 = false;
 
     const bool enter = ks.enter;
     const bool space = ks.space;
@@ -387,6 +440,10 @@ static void handleKeys()
     const bool ukey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('u');
     const bool minus = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('-');
     const bool plus  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('=');
+    const bool d1 = M5Cardputer.Keyboard.isKeyPressed('1');
+    const bool d2 = M5Cardputer.Keyboard.isKeyPressed('2');
+    const bool d3 = M5Cardputer.Keyboard.isKeyPressed('3');
+    const bool d4 = M5Cardputer.Keyboard.isKeyPressed('4');
 
     const bool eEnter = enter && !pEnter;
     const bool eSpace = space && !pSpace;
@@ -406,11 +463,16 @@ static void handleKeys()
     const bool eU = ukey && !pU;
     const bool eMinus = minus && !pMinus;
     const bool ePlus  = plus && !pPlus;
+    const bool eD1 = d1 && !pD1;
+    const bool eD2 = d2 && !pD2;
+    const bool eD3 = d3 && !pD3;
+    const bool eD4 = d4 && !pD4;
 
     pEnter = enter; pSpace = space; pDel = del; pTab = tab;
     pUp = up; pDown = down; pLeft = left; pRight = right;
     pR = rkey; pS = skey; pM = mkey; pG = gkey; pC = ckey;
     pD = dkey; pN = nkey; pMinus = minus; pPlus = plus; pU = ukey;
+    pD1 = d1; pD2 = d2; pD3 = d3; pD4 = d4;
 
     if (app.renaming) {
         char cur[32] = {0};
@@ -505,10 +567,10 @@ static void handleKeys()
         if (ks.fn && eUp)   cycleBars(+1);
         if (ks.fn && eDown) cycleBars(-1);
 
-        if (M5Cardputer.Keyboard.isKeyPressed('1')) app.selectedLane = 0;
-        if (M5Cardputer.Keyboard.isKeyPressed('2')) app.selectedLane = 1;
-        if (M5Cardputer.Keyboard.isKeyPressed('3')) app.selectedLane = 2;
-        if (M5Cardputer.Keyboard.isKeyPressed('4')) app.selectedLane = 3;
+        if (eD1) { if (ks.fn) toggleLaneMute(0); else app.selectedLane = 0; }
+        if (eD2) { if (ks.fn) toggleLaneMute(1); else app.selectedLane = 1; }
+        if (eD3) { if (ks.fn) toggleLaneMute(2); else app.selectedLane = 2; }
+        if (eD4) { if (ks.fn) toggleLaneMute(3); else app.selectedLane = 3; }
 
         if (eDel) {
             if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
@@ -529,7 +591,10 @@ static void handleKeys()
         if (eDown && n) { app.sel = (app.sel + 1) % n; adjustScroll(); }
         if (eD && n) app.confirmDelete = true;
         if (eN && n) startRename();
-        if (eEnter) setToast("D DEL  N RENAME");
+        if (eEnter) {
+            if (n) loadSelected();
+            else   setToast("NO FILE");
+        }
         if (eDel) app.screen = Screen::LOOP;
         return;
     }
@@ -687,6 +752,7 @@ void loop()
     if (millis() - lastRender >= 100) {
         lastRender = millis();
         looper.laneCounts(app.laneCount);
+        for (int i = 0; i < 4; ++i) app.laneMuted[i] = looper.mute((uint8_t)i);
         ui.render();
     }
 

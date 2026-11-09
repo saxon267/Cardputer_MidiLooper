@@ -51,6 +51,7 @@
       this.swing = 50;
       this.gen = 1;
       this.undoStack = [];      // { gen, count }
+      this.muteLanes = [false, false, false, false];
     }
 
     loopLenTicks() { return this.bars * BEATS * PPQN; }
@@ -113,6 +114,46 @@
     pushUndo(gen, count) {
       this.undoStack.push({ gen, count });
       if (this.undoStack.length > 8) this.undoStack.shift();
+    }
+
+    setMute(lane, on) {
+      if (lane >= 0 && lane < 4) this.muteLanes[lane] = !!on;
+    }
+
+    mute(lane) {
+      return lane >= 0 && lane < 4 && this.muteLanes[lane];
+    }
+
+    toggleMute(lane) {
+      if (lane < 0 || lane >= 4) return false;
+      this.muteLanes[lane] = !this.muteLanes[lane];
+      return this.muteLanes[lane];
+    }
+
+    load(events, bars) {
+      if (!events || !events.length) return false;
+      const b = Math.max(1, Math.min(32, bars | 0));
+      this.bars = b;
+      this.active = events.map(e => ({
+        tick: Math.min(e.tick, b * BEATS * PPQN - 1),
+        type: e.type & 0x0F,
+        d1: e.d1,
+        d2: e.d2,
+        ch: e.ch,
+      })).sort(cmpEvent);
+      this.inactive = [];
+      this.take = [];
+      this.phaseQ16 = 0;
+      this.phaseTick = 0;
+      this.idx = 0;
+      this.state = State.STOP;
+      this.overdub = false;
+      this.armed = false;
+      this.autoStop = false;
+      this.startPulse = false;
+      this.gen = 1;
+      this.undoStack = [];
+      return true;
     }
 
     undo() {
@@ -333,7 +374,11 @@
       if (q >= lenQ) {
         // Flush any tail still held back by swing before wrapping.
         while (this.idx < this.active.length) {
-          if (this.onEvent) this.onEvent(this.active[this.idx]);
+          const e = this.active[this.idx];
+          const lane = laneOfChannel(e.ch);
+          if (lane < 0 || !this.muteLanes[lane]) {
+            if (this.onEvent) this.onEvent(e);
+          }
           ++this.idx;
         }
         this.idx = 0;
@@ -356,7 +401,10 @@
         let due = e.tick + this.swingOffsetTicks(e.tick);
         if (due >= len) due = len - 1;
         if (due > tick) break;
-        if (this.onEvent) this.onEvent(e);
+        const lane = laneOfChannel(e.ch);
+        if (lane < 0 || !this.muteLanes[lane]) {
+          if (this.onEvent) this.onEvent(e);
+        }
         ++this.idx;
       }
       this.lastFlags = flags;

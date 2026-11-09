@@ -63,6 +63,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   }
 
   const key = k => `window.dispatchEvent(new KeyboardEvent('keydown',{key:${JSON.stringify(k)},bubbles:true}))`;
+  const keyShift = k => `window.dispatchEvent(new KeyboardEvent('keydown',{key:${JSON.stringify(k)},shiftKey:true,bubbles:true}))`;
   const snap = () => evaluate(`(() => {
     const L = window.__looper;
     if (!L) return null;
@@ -75,6 +76,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       loopLen: L.engine.loopLenTicks(),
       phase: L.engine.phasePermille(),
       lanes: L.engine.laneCounts(),
+      mutes: [0, 1, 2, 3].map(i => L.engine.mute(i)),
       files: L.state.files.length,
     };
   })()`);
@@ -113,6 +115,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   check(s && s.state === 'PLAY', 'auto-stop at loop end → PLAY');
   check(s && s.hasLoop && s.count > 0, 'loop retains events');
   check(s && s.loopLen === 4 * 4 * 480, 'loop length = 4 bars');
+
+  // Shift+1 toggles lane mute from the UI path.
+  await evaluate(keyShift('1'));
+  await sleep(120);
+  s = await snap();
+  check(s && s.mutes[0] === true, 'Shift+1 → CH1 MUTE');
+  await evaluate(keyShift('1'));
+  await sleep(120);
+  s = await snap();
+  check(s && s.mutes[0] === false, 'Shift+1 again → CH1 ON');
 
   // Overdub at the current phase, then stop.
   const base = s ? s.count : 0;

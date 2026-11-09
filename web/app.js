@@ -27,10 +27,10 @@
     phase: 0,
     selectedLane: 0,
     lanes: [
-      { ch: 1,  name: 'LEAD', color: C.acc,  count: 0, on: true, level: 0 },
-      { ch: 2,  name: 'PAD',  color: C.aqua, count: 0, on: true, level: 0 },
-      { ch: 3,  name: 'BASS', color: C.amb,  count: 0, on: true, level: 0 },
-      { ch: 10, name: 'DRUM', color: C.blue, count: 0, on: true, level: 0 },
+      { ch: 1,  name: 'LEAD', color: C.acc,  count: 0, on: true, muted: false, level: 0 },
+      { ch: 2,  name: 'PAD',  color: C.aqua, count: 0, on: true, muted: false, level: 0 },
+      { ch: 3,  name: 'BASS', color: C.amb,  count: 0, on: true, muted: false, level: 0 },
+      { ch: 10, name: 'DRUM', color: C.blue, count: 0, on: true, muted: false, level: 0 },
     ],
     files: [
       { name: 'LOOP_0001.MID', size: '12K' },
@@ -118,6 +118,7 @@
     const counts = engine.laneCounts();
     for (let i = 0; i < 4; ++i) {
       state.lanes[i].count = counts[i];
+      state.lanes[i].muted = engine.mute(i);
       state.lanes[i].level = Math.min(1, counts[i] / 72);
     }
   }
@@ -268,11 +269,12 @@
   function drawLane(i, y) {
     const L = state.lanes[i];
     const sel = state.selectedLane === i;
+    const muted = !!L.muted;
     if (sel) {
       fill(2, y, 236, 17, C.pad);
       fill(2, y, 2, 17, L.color);
     }
-    text(7, y + 5, 'CH' + L.ch, L.color, true);
+    text(7, y + 5, 'CH' + L.ch, muted ? C.faint : L.color, true);
     text(37, y + 5, L.name, sel ? C.txt : C.dim, sel);
 
     // 18-cell meter
@@ -280,11 +282,11 @@
     fill(mx, my, 18 * (cw + cg) - cg, 6, C.line);
     const lit = Math.round((L.level || 0) * 18);
     for (let s = 0; s < 18; ++s) {
-      fill(mx + s * (cw + cg), my, cw, 6, s < lit ? L.color : C.line);
+      fill(mx + s * (cw + cg), my, cw, 6, s < lit ? (muted ? C.faint : L.color) : C.line);
     }
 
     textR(204, y + 5, L.count ? String(L.count) : '--', C.dim);
-    text(217, y + 5, L.on ? 'ON' : 'OFF', L.on ? C.aqua : C.faint);
+    text(217, y + 5, muted ? 'OFF' : 'ON', muted ? C.red : C.aqua);
   }
 
   function drawLoop() {
@@ -609,7 +611,17 @@
       toast(ok ? 'UNDO' : 'NOTHING TO UNDO');
       return;
     }
-    if (k >= '1' && k <= '4') { state.selectedLane = Number(k) - 1; return; }
+    if (k >= '1' && k <= '4') {
+      const lane = Number(k) - 1;
+      if (e.shiftKey) {
+        const muted = engine.toggleMute(lane);
+        syncFromEngine();
+        toast('CH' + [1, 2, 3, 10][lane] + (muted ? ' MUTE' : ' ON'));
+      } else {
+        state.selectedLane = lane;
+      }
+      return;
+    }
     if (k === 'ArrowUp') {
       e.preventDefault();
       if (state.settings) state.settingsRow = (state.settingsRow + 5) % 6;

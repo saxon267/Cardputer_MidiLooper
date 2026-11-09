@@ -7,8 +7,9 @@
 | `R` / `Space` | 录音 / 停止录音；有循环时 = 叠录 |
 | `Enter` | 播放 / 停止 |
 | `S` | 保存 `/MidiLoop/LOOP_xxxx.MID` |
-| `C` | 清空循环 |
+| `C` | 清空当前轨道（不删除 `.mid` 文件） |
 | `U` | 撤销最后一次叠录（叠录中 = 取消当前 take） |
+| `Fn` + `1..4` | Mute / Unmute CH1 / CH2 / CH3 / CH10 |
 | `M` | 节拍器开 / 关 |
 | `G` | 设置浮层 |
 | `Tab` | LOOP ↔ FILE |
@@ -32,6 +33,7 @@
 | `;` / `.` | 选择 |
 | `D` | 删除（`Enter` 确认，`Bksp` 取消） |
 | `N` | 改名（键入选字；`Enter` 确认，`Bksp` 退格，`Tab` 取消） |
+| `Enter` | 载入选中的 `.mid` 并播放（文件保留） |
 | `Tab` / `Bksp` | 回 LOOP |
 
 ## 设置浮层
@@ -47,7 +49,7 @@
 
 `STOP` → 按 R → `ARMED`（count-in 4 拍）→ 首个 MIDI → `REC` → 录满/再按 R → `PLAY`。
 `PLAY` 按 R → `OVERDUB`（立即按当前相位）→ 再按 R/循环末尾 → `PLAY`。
-`U` → 撤销最后一次叠录；`C` → 清空全部。
+`U` → 撤销最后一次叠录；`C` → 清空当前轨道（不删文件）；`Fn` + `1..4` → Mute。
 
 Quantize 默认 1/16（120 ticks），SWING 默认 50；两者都在设置浮层里改。
 

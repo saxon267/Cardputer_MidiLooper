@@ -337,7 +337,7 @@ static void testQuantize()
 }
 
 static LoopEngine* g_swingEngine = nullptr;
-struct SwingHit { uint32_t ev; uint32_t at; };
+struct SwingHit { uint32_t ev; uint32_t at; uint8_t ch; };
 static SwingHit g_hits[8] = {};
 static int g_hitCount = 0;
 
@@ -346,6 +346,7 @@ static void swingSink(const LoopEvent& e)
     if (g_hitCount < 8) {
         g_hits[g_hitCount].ev = e.tick;
         g_hits[g_hitCount].at = g_swingEngine->positionTicks();
+        g_hits[g_hitCount].ch = e.ch;
         ++g_hitCount;
     }
 }
@@ -425,6 +426,60 @@ static void testUndo()
     CHECK(e.count() == 2);
 }
 
+static void testMute()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+    e.setQuantize(Q_OFF);
+
+    CHECK(e.startFirst());
+    g_test_us = 0;
+    noteOn(e, 0, 60, 100);              // CH1 tick 0
+    g_test_us = 500000;
+    noteOn(e, 1, 64, 100);              // CH2 tick 480
+    e.stopRecord();
+
+    CHECK(e.toggleMute(0));             // mute CH1
+    CHECK(e.mute(0));
+
+    g_hitCount = 0;
+    g_swingEngine = &e;
+    e.setSink(swingSink);
+    e.play();
+    for (int i = 0; i < 400; ++i) block(e, 1);
+
+    CHECK(g_hitCount == 1);
+    CHECK(g_hits[0].ch == 1);           // only CH2
+    e.setSink(nullptr);
+}
+
+static void testLoad()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+
+    LoopEvent* buf = e.loadBuffer();
+    CHECK(buf != nullptr);
+    buf[0] = {0,   LE_NOTE_ON, 60, 100, 0};
+    buf[1] = {240, LE_NOTE_ON, 64, 100, 1};
+    CHECK(e.loadCommit(2, 4));
+
+    CHECK(e.count() == 2);
+    CHECK(e.bars() == 4);
+    CHECK(e.state() == LoopState::STOP);
+    CHECK(e.events()[0].tick == 0);
+    CHECK(e.events()[1].tick == 240);
+    CHECK(LoopEngine::typeOf(e.events()[0]) == LE_NOTE_ON);
+
+    CHECK(e.play());
+    g_hitCount = 0;
+    g_swingEngine = &e;
+    e.setSink(swingSink);
+    for (int i = 0; i < 400; ++i) block(e, 1);
+    CHECK(g_hitCount == 2);
+    e.setSink(nullptr);
+}
+
 static void testArmTimeout()
 {
     LoopEngine e;
@@ -451,6 +506,8 @@ int main()
     testQuantize();
     testSwing();
     testUndo();
+    testMute();
+    testLoad();
     testClearAndStop();
     testArmTimeout();
 

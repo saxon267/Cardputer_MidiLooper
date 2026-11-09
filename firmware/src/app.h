@@ -25,6 +25,7 @@ struct App {
     uint8_t  battery      = 80;
 
     uint16_t laneCount[4] = {0, 0, 0, 0};
+    bool     laneMuted[4] = {false, false, false, false};
     uint16_t phasePermille = 0;
     uint16_t barNow       = 1;
     bool     hasLoop      = false;

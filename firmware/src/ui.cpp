@@ -171,12 +171,13 @@ void UI::laneRow(int i, int y)
     static const uint16_t cols[4] = {C_ACC, C_AQUA, C_AMB, C_BLUE};
 
     const bool sel = (app.selectedLane == i);
+    const bool muted = app.laneMuted[i];
     if (sel) {
         rect(2, y, 236, 17, C_PAD);
         rect(2, y, 2, 17, cols[i]);
     }
 
-    textf(7, y + 5, cols[i], true, 1, "CH%d", chs[i]);
+    textf(7, y + 5, muted ? C_FAINT : cols[i], true, 1, "CH%d", chs[i]);
     text(37, y + 5, names[i], sel ? C_TXT : C_DIM, sel);
 
     const int mx = 68, my = y + 5, cw = 5, cg = 1;
@@ -184,7 +185,7 @@ void UI::laneRow(int i, int y)
     int lit = (int)app.laneCount[i] * 18 / 72;
     if (lit > 18) lit = 18;
     for (int s = 0; s < 18; ++s) {
-        rect(mx + s * (cw + cg), my, cw, 6, s < lit ? cols[i] : C_LINE);
+        rect(mx + s * (cw + cg), my, cw, 6, s < lit ? (muted ? C_FAINT : cols[i]) : C_LINE);
     }
 
     if (app.laneCount[i]) {
@@ -194,7 +195,7 @@ void UI::laneRow(int i, int y)
     } else {
         textR(204, y + 5, "--", C_DIM);
     }
-    text(217, y + 5, "ON", C_AQUA);
+    text(217, y + 5, muted ? "OFF" : "ON", muted ? C_RED : C_AQUA);
 }
 
 void UI::drawLoop()
