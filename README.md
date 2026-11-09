@@ -258,6 +258,7 @@ test_loop.exe
 5. **叠录一次只叠一条 lane**：staging 4096；第一次录音可以四通道一起录（FM-1 sequencer）。
 6. **没有文件载入**：FILE 页只删除/改名，保存的 `.MID` 不能在固件里重新载入播放。
 7. **没有 per-lane mute/solo、自定义量化网格、三连音 swing**；Undo 栈保留最近 8 次叠录，超过后旧的 take 不再可撤销。
+8. **Quantize 对 note-on/off 都生效**：极短音符的 on/off 可能被压到同一 tick（当前没有最小长度保护）；**Swing 只作用于精确 8 分格**，不做 16 分/三连音 swing。
 8. **count-in 只作用于第一次录音**；叠录立即开始。
 9. **Sloop HOLD**：`ARP 2 → HOLD` 必须 OFF，否则停止后挂音；这是 Sloop 侧设置。
 10. **不发送 Program Change / SysEx**；只录 Note/CC64/CC1/PB。
