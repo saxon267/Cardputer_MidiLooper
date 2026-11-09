@@ -2,8 +2,8 @@
 
 240×135、Gruvbox Dark 的四通道 MIDI 循环叠录固件。Cardputer-Adv 作为 **USB-C Host** 直连 M-VAVE FM-1（Sloop），把 FM-1 的 CH1/2/3/10 录成循环，叠录后回放给 FM-1 发声。
 
-> **状态**：v1.0.0 已发布（上机确认可用）；main 上的 **v1.2.0 是 4 轨 seq 丢音修复 + Loop 模式 + 录制闪动 + 启动页 1.5s 候选，尚未发版**。  
-> **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.0.0>
+> **状态**：**v1.2.0 已发布**（上机验证）；包含 Loop 模式、录制闪动、启动页 v1.2.0 / 1.5 s、Quantize note-off 丢音修复。  
+> **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.2.0>
 
 ![LOOP 播放](docs/ui/loop-play.png)
 
@@ -98,7 +98,7 @@ node web/test/run-node.js
 
 `pwsh tools/web-smoke.ps1` 会启动 headless Edge，通过 CDP 真实点击/按键走一遍交互流程（count-in → REC → 自动停 → MUTE → OVERDUB → UNDO → SAVE → CLEAR → early stop → BARS 保护 → LOOP MODE），当前 **24 项检查全通过**。
 
-> 这验证的是 Web 模型（`web/engine.js`）与 UI 交互契约；固件侧的 C++ 实现对同一组场景另有 host test（第 9 节）。两者都通过，但仍**不能替代** USB/ES8311/SD 的真机验证。
+> 这验证的是 Web 模型（`web/engine.js`）与 UI 交互契约；固件侧的 C++ 实现对同一组场景另有 host test（第 9 节）。两者都通过；USB、ES8311、SD 等硬件行为仍以真机为准。
 
 ---
 
@@ -223,8 +223,8 @@ firmware/src/
 
 | 项 | 值 |
 |---|---:|
-| 静态 RAM | 210,116 B / 327,680 B（64.1%，1.2.0 候选；v1.0.0 为 209,060） |
-| Flash | 679,601 B / 3,145,728 B（21.6%，1.2.0 候选；v1.0.0 为 677,897） |
+| 静态 RAM | 210,116 B / 327,680 B（64.1%） |
+| Flash | 679,601 B / 3,145,728 B（21.6%） |
 | 循环事件 | 2 × 8192 × 8 B + 4096 × 8 B = 160 KB |
 | UI sprite | 240 × 135 × 16 bpp = 64.8 KB（堆） |
 | 音频 | 44.1 kHz / 64 帧块 / 6 DMA |
@@ -260,7 +260,7 @@ test_loop.exe
 
 `test/host/Arduino.h` 和 `test/host/SD.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现、内存 SD），**不测试** USB、ES8311 和真机时序；同一组场景的 Web 版本见第 3.1 节。
 
-## 10. 已知限制（v1.0.0）
+## 10. 已知限制（v1.2.0）
 
 1. **USB Host 已上机确认**；不同 FM-1 批次/描述符仍可能有枚举差异，换设备时先看顶栏 USB 状态。
 2. **不同步 FM-1 sequencer 的小节相位**：不解析 FA/FB/FC；只支持内部 BPM 为主。要同步需后续加 transport + Sloop 外部时钟。
@@ -285,7 +285,7 @@ test_loop.exe
 4. **Sloop**：`OUT=SEQ`、`ARP 2 → HOLD=OFF`；HOLD 打开时停止会挂音，也会污染下一次录音。
 5. **事件上限**：4 轨 16 分在 32 小节约 4096 个事件，通常够；4 轨 32 分或大量 CC/PB 会到 8192。
 
-> 上述 note-off 量化修复在 **v1.2.0 候选**（main）中，尚未重新发版；验证通过后发 `v1.2.0`。
+> Quantize note-off 修复已包含在 **v1.2.0** 正式版中。
 
 ---
 
