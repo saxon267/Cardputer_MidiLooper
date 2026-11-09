@@ -101,6 +101,24 @@ static void syncApp()
 }
 
 // ---------------------------------------------------------------- loop actions
+static bool startFirstTake()
+{
+    if (!app.usbConnected) {
+        setToast("CONNECT FM1");
+        return false;
+    }
+    if (!usbMidi.inputEndpoint()) {
+        setToast("NO MIDI IN");
+        return false;
+    }
+    looper.startFirst();
+    app.countInLeft     = app.countIn ? LOOP_BEATS : 0;
+    app.countInInterval = (uint16_t)(600000u / (app.bpmX10 ? app.bpmX10 : 1200u));
+    app.countInNext     = millis();
+    setToast(app.countIn ? "COUNT IN" : "WAIT MIDI");
+    return true;
+}
+
 static void toggleRecord()
 {
     if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
@@ -118,18 +136,12 @@ static void toggleRecord()
         setToast("NO MIDI IN");
         return;
     }
-
     if (looper.state() == LoopState::PLAY || looper.hasLoop()) {
         looper.startOverdub();
         setToast("OVERDUB");
         return;
     }
-
-    looper.startFirst();
-    app.countInLeft     = app.countIn ? LOOP_BEATS : 0;
-    app.countInInterval = (uint16_t)(600000u / (app.bpmX10 ? app.bpmX10 : 1200u));
-    app.countInNext     = millis();
-    setToast(app.countIn ? "COUNT IN" : "WAIT MIDI");
+    startFirstTake();
 }
 
 static void togglePlay()
@@ -144,7 +156,7 @@ static void togglePlay()
         app.countInLeft = 0;
         setToast("STOPPED");
     } else if (!looper.play()) {
-        setToast("NO LOOP");
+        setToast("REC FIRST");
     }
 }
 
@@ -383,7 +395,31 @@ static void toggleLoopMode()
 {
     const bool on = looper.toggleLoopMode();
     prefs.putBool("loop", on);
-    setToast(on ? "LOOP MODE ON" : "LOOP MODE OFF");
+
+    if (!on) {
+        if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
+            looper.stopRecord();
+            usbMidi.panic();
+            app.countInLeft = 0;
+        }
+        setToast("LOOP OFF");
+        return;
+    }
+
+    if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
+        setToast("LOOP REC");
+        return;
+    }
+    if (!app.usbConnected || !usbMidi.inputEndpoint()) {
+        setToast("LOOP ON");
+        return;
+    }
+    if (looper.hasLoop()) {
+        looper.startOverdub();
+        setToast("LOOP REC");
+    } else if (startFirstTake()) {
+        setToast("LOOP ARM");
+    }
 }
 
 static void cycleQuantize(int dir)
@@ -639,11 +675,11 @@ static void handleSerial()
         const int c = Serial.read();
         if (c < 0) break;
         if (c == 'i' || c == 'I') {
-            Serial.printf("[loop] state=%d bars=%u bpm=%u ev=%d take=%d phase=%u rx=%u ovf=%d heap=%u\n",
+            Serial.printf("[loop] state=%d bars=%u bpm=%u ev=%d take=%d phase=%u rx=%u ovf=%d mode=%d heap=%u\n",
                           (int)looper.state(), app.bars, app.bpmX10 / 10, looper.count(),
                           looper.takeCount(), (unsigned)looper.phasePermille(),
                           (unsigned)usbMidi.inputCount(), looper.overflow() ? 1 : 0,
-                          (unsigned)ESP.getFreeHeap());
+                          looper.loopMode() ? 1 : 0, (unsigned)ESP.getFreeHeap());
         } else if (c == 'r' || c == 'R') {
             toggleRecord();
         } else if (c == 'p' || c == 'P') {
