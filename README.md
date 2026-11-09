@@ -2,7 +2,7 @@
 
 240×135、Gruvbox Dark 的四通道 MIDI 循环叠录固件。Cardputer-Adv 作为 **USB-C Host** 直连 M-VAVE FM-1（Sloop），把 FM-1 的 CH1/2/3/10 录成循环，叠录后回放给 FM-1 发声。
 
-> **状态**：v1.0.0 已发布（上机确认可用）；main 上的 **v1.1.0 是 4 轨 seq 丢音修复 + Loop 模式 + 录制闪动候选，尚未发版**。  
+> **状态**：v1.0.0 已发布（上机确认可用）；main 上的 **v1.2.0 是 4 轨 seq 丢音修复 + Loop 模式 + 录制闪动 + 启动页 1.5s 候选，尚未发版**。  
 > **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.0.0>
 
 ![LOOP 播放](docs/ui/loop-play.png)
@@ -29,7 +29,7 @@
 | 保存 | `S` → `/MidiLoop/LOOP_xxxx.MID`，SMF Format 0、480 PPQN、EOT 在循环末尾 |
 | 文件管理 | `FILE` 页删除 / 改名；只显示 `.mid` / `.midi` |
 | 设置 | BPM、小节、Quantize、Swing、click、count-in；NVS 保存 |
-| UI | 两个标签页 LOOP / FILE + 设置浮层；240×135 sprite |
+| UI | 两个标签页 LOOP / FILE + 设置浮层；240×135 sprite；启动页显示 `v1.2.0` 并停留 1.5 s |
 
 事件类型：Note On/Off、CC64 延音、CC1 调制、Pitch Bend。**不发送** Program Change。
 
@@ -164,7 +164,7 @@ node web/test/run-node.js
 11. **Undo**：每次进入叠录取一个 take generation；`U` 过滤掉该 generation 的事件。因为叠录是排序合并，不能简单按数量截断，否则会误删旧事件。
 12. **文件播放**：FILE 页 `Enter` 读取 SMF（Format 0/1、480 PPQN 转换、tempo、EOT），载入 inactive buffer 后提交并播放；`C` 只清 RAM 轨道，`.mid` 文件保留。
 13. **Mute**：`Fn` + `1..4` 切换；pump 跳过该 lane 的事件，并在静音瞬间对该通道发 `allNotesOff`，避免正在响的音挂住。Mute 只影响回放，保存仍包含全部事件。
-14. **Loop 模式**：`L` 开关（NVS 保存）。按 `L` 开启时：没有循环则直接进入 `ARMED`（有 count-in 就倒计时），已有循环则直接进入 overdub，**不需要再按 `R`**；之后每次到循环末尾自动续录。再按 `L` 关闭会结束当前 take。手动按 `R` 仍可结束当前 take。事件满时不会继续自动续录。
+14. **Loop 模式**：`L` 只切换自动续录（NVS 保存），不改变当前走带；第一遍仍用 `R` 启动。开启后每次到循环末尾自动进入下一遍 overdub，不需要再按 `R`；手动 `R` 结束当前 take 后不会自动续录。`L` 关闭只停止自动续录，不打断当前 take。事件满时不会继续自动续录。
 15. **录制闪动**：`REC` / `OVERDUB` 中收到 note-on 时，对应 lane 行闪 90 ms；UI 以 30 fps 渲染，闪动跟随输入音符的节奏。
 
 ---
@@ -223,8 +223,8 @@ firmware/src/
 
 | 项 | 值 |
 |---|---:|
-| 静态 RAM | 210,116 B / 327,680 B（64.1%，1.1.0 候选；v1.0.0 为 209,060） |
-| Flash | 679,957 B / 3,145,728 B（21.6%，1.1.0 候选；v1.0.0 为 677,897） |
+| 静态 RAM | 210,116 B / 327,680 B（64.1%，1.2.0 候选；v1.0.0 为 209,060） |
+| Flash | 679,601 B / 3,145,728 B（21.6%，1.2.0 候选；v1.0.0 为 677,897） |
 | 循环事件 | 2 × 8192 × 8 B + 4096 × 8 B = 160 KB |
 | UI sprite | 240 × 135 × 16 bpp = 64.8 KB（堆） |
 | 音频 | 44.1 kHz / 64 帧块 / 6 DMA |
@@ -285,7 +285,7 @@ test_loop.exe
 4. **Sloop**：`OUT=SEQ`、`ARP 2 → HOLD=OFF`；HOLD 打开时停止会挂音，也会污染下一次录音。
 5. **事件上限**：4 轨 16 分在 32 小节约 4096 个事件，通常够；4 轨 32 分或大量 CC/PB 会到 8192。
 
-> 上述 note-off 量化修复在 **v1.1.0 候选**（main）中，尚未重新发版；验证通过后发 `v1.1.0`。
+> 上述 note-off 量化修复在 **v1.2.0 候选**（main）中，尚未重新发版；验证通过后发 `v1.2.0`。
 
 ---
 

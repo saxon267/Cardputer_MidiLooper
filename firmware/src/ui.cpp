@@ -387,7 +387,9 @@ void UI::boot(uint8_t pct, int files)
     textC(SCR_W / 2, 20, "MIDI", C_ACC, true, 3);
     textC(SCR_W / 2, 48, "LOOP", C_TXT, true, 3);
     textC(SCR_W / 2, 78, "USB HOST", C_DIM, true);
-    textC(SCR_W / 2, 90, APP_VERSION, C_FAINT);
+    char ver[24];
+    snprintf(ver, sizeof(ver), "v%s", APP_VERSION);
+    textC(SCR_W / 2, 90, ver, C_TXT, true);
 
     frame(60, 104, 120, 8, C_EDGE);
     rect(61, 105, 118, 6, C_LINE);

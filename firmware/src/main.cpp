@@ -395,31 +395,7 @@ static void toggleLoopMode()
 {
     const bool on = looper.toggleLoopMode();
     prefs.putBool("loop", on);
-
-    if (!on) {
-        if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
-            looper.stopRecord();
-            usbMidi.panic();
-            app.countInLeft = 0;
-        }
-        setToast("LOOP OFF");
-        return;
-    }
-
-    if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
-        setToast("LOOP REC");
-        return;
-    }
-    if (!app.usbConnected || !usbMidi.inputEndpoint()) {
-        setToast("LOOP ON");
-        return;
-    }
-    if (looper.hasLoop()) {
-        looper.startOverdub();
-        setToast("LOOP REC");
-    } else if (startFirstTake()) {
-        setToast("LOOP ARM");
-    }
+    setToast(on ? "LOOP MODE ON" : "LOOP MODE OFF");
 }
 
 static void cycleQuantize(int dir)
@@ -756,7 +732,7 @@ void setup()
 
     app.screen = app.sdOk ? Screen::LOOP : Screen::NO_SD;
     ui.boot(100, library.count());
-    delay(180);
+    delay(1500);
     ui.render();
 
     if (!audioOk) setToast("AUDIO INIT FAILED");

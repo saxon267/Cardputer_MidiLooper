@@ -615,21 +615,8 @@
     if (k === 'g' || k === 'G') { state.settings = !state.settings; return; }
     if (k === 'l' || k === 'L') {
       const on = engine.toggleLoopMode();
-      if (on) {
-        if (engine.state === 'REC' || engine.state === 'ARMED') {
-          toast('LOOP REC');
-        } else if (engine.hasLoop()) {
-          startRec();
-          toast('LOOP REC');
-        } else {
-          startRec();
-          toast('LOOP ARM');
-        }
-      } else {
-        if (engine.state === 'REC' || engine.state === 'ARMED') stopRec();
-        toast('LOOP OFF');
-      }
       syncFromEngine();
+      toast(on ? 'LOOP MODE ON' : 'LOOP MODE OFF');
       return;
     }
     if (k === 'm' || k === 'M') { state.click = !state.click; toast(state.click ? 'CLICK ON' : 'CLICK OFF'); return; }

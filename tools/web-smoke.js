@@ -177,12 +177,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   await sleep(120);
   s = await snap();
   check(s && s.loopMode === true, 'L → LOOP MODE ON');
-  check(s && s.state === 'REC', 'L starts recording without R');
+  check(s && s.state === 'PLAY', 'L does not change transport');
   await evaluate(key('l'));
   await sleep(120);
   s = await snap();
   check(s && s.loopMode === false, 'L again → LOOP MODE OFF');
-  check(s && s.state === 'PLAY', 'L off stops the take');
+  check(s && s.state === 'PLAY', 'L off leaves playback alone');
 
   ws.close();
   console.log('\n' + (ok ? 'RESULT OK' : 'RESULT FAIL'));
