@@ -1,6 +1,12 @@
 # MidiLooper v0.1.0 — UI + firmware MVP
 
-**状态**：UI 预览可用；固件 PlatformIO 编译通过；合并镜像已生成。**尚未在真机逐项验收**。
+**状态**：UI 预览、Web 逻辑自检与 C++ host test 通过；固件 PlatformIO 编译通过；合并镜像已生成。**尚未在真机逐项验收**。
+
+## 验证
+
+- **Web 模型**：`web/test.html` / `node web/test/run-node.js`，11/11 `ALL PASS`。
+- **交互 smoke**：`pwsh tools/web-smoke.ps1`（headless Edge + CDP），18/18 通过。
+- **C++ host**：`firmware/test/host/test_loop.cpp`，11/11 `RESULT OK`。
 
 ## 内容
 

@@ -31,9 +31,9 @@
 
 ### 2.1 先看 UI（不用刷机）
 
-双击 **`web/index.html`**，或拖进浏览器。左侧是 240×135 的 1:1 画布（3× 放大），右侧是走带 / BPM / 小节 / 节拍器控制；键盘 `R`、`Enter`、`Tab`、`S`、`M`、`1–4`、方向键都能用。
+双击 **`web/index.html`**，或拖进浏览器。左侧是 240×135 的 1:1 画布（3× 放大），右侧是走带 / BPM / 小节 / 节拍器控制；键盘 `R`、`Enter`、`Tab`、`S`、`M`、`1–4`、方向键都能用。右侧 `TESTS` 按钮打开逻辑自检页。
 
-> 模拟器是 UI 的交互预览，不是固件二进制；版式常量与 `firmware/src/ui.cpp` 一一对应。
+> 模拟器是 UI 的交互预览，不是固件二进制；版式常量与 `firmware/src/ui.cpp` 一一对应。录音时的数据来自 `web/engine.js`（与 `loop.cpp` 同一套状态机/时基契约），不是随机数。
 
 ### 2.2 编译 / 烧写
 
@@ -74,6 +74,23 @@ LOOP 页：走带状态、`BAR n/N`、BPM、循环进度/拍点、四 lane 计�
 FILE 页：`/MIDILOOP` 路径、文件数、6 行列表（文件名 + 大小），选中行反色。
 
 设置浮层：BPM / BARS / CLICK / COUNT-IN，`;` / `.` 选行，`,` / `/` 改值，`Bksp` / `G` / `Tab` 关闭。
+
+### 3.1 Web 逻辑自检
+
+[web/test.html](<web/test.html>) 直接跑 **11 个场景**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤、early stop、8192 容量、停止/清空、ARMED 超时、拍点。当前结果 **ALL PASS**。
+
+![Web logic tests](docs/ui/logic-tests.png)
+
+也可以在 PC 上无浏览器跑同一套：
+
+```bash
+node web/test/run-node.js
+# RESULT OK
+```
+
+`pwsh tools/web-smoke.ps1` 会启动 headless Edge，通过 CDP 真实点击/按键走一遍交互流程（count-in → REC → 自动停 → OVERDUB → SAVE → CLEAR → early stop → BARS 保护），当前 **18 项检查全通过**。
+
+> 这验证的是 Web 模型（`web/engine.js`）与 UI 交互契约；固件侧的 C++ 实现对同一组场景另有 host test（第 9 节）。两者都通过，但仍**不能替代** USB/ES8311/SD 的真机验证。
 
 ---
 
@@ -217,7 +234,7 @@ python -m ziglang c++ -std=c++17 -I test/host -I src ^
 test_loop.exe
 ```
 
-覆盖：小节/BPM clamp、首录、自动停、叠录相位、通道过滤、lane 映射、停止/清空、ARMED 超时。`test/host/Arduino.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现），**不测试** USB、ES8311、SD 和真机时序。
+覆盖：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤/lane 映射、early stop、8192 容量、停止/清空、ARMED 超时、拍点。`test/host/Arduino.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现），**不测试** USB、ES8311、SD 和真机时序；同一组场景的 Web 版本见第 3.1 节。
 
 ## 10. 已知限制（v0.1 诚实列表）
 

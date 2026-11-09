@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIDI Looper — Web Logic Tests</title>
+<style>
+  :root {
+    --bg:#111312; --panel:#1d2021; --edge:#3c3836; --txt:#ebdbb2;
+    --dim:#a89984; --faint:#7c6f64; --acc:#fe8019; --green:#b8bb26;
+    --red:#fb4934; --aqua:#8ec07c;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin:0; min-height:100vh; background:
+      radial-gradient(900px 500px at 50% -10%, #2a2b26 0%, transparent 60%), var(--bg);
+    color:var(--txt); font-family:"DM Mono","Cascadia Mono","Consolas",monospace;
+    padding:36px 20px 60px;
+  }
+  .wrap { max-width:900px; margin:0 auto; }
+  h1 { margin:0; font-size:22px; letter-spacing:.14em; font-weight:600; }
+  h1 span { color:var(--acc); }
+  .sub { margin:10px 0 22px; color:var(--dim); font-size:12px; line-height:1.7; }
+  .summary {
+    display:flex; align-items:center; gap:14px; padding:14px 16px;
+    border:1px solid var(--edge); border-radius:10px; background:rgba(40,40,40,.55);
+    margin-bottom:16px;
+  }
+  .summary .big { font-size:20px; letter-spacing:.08em; }
+  .summary .big.pass { color:var(--green); }
+  .summary .big.fail { color:var(--red); }
+  .summary .meta { color:var(--faint); font-size:11px; }
+  table { width:100%; border-collapse:collapse; font-size:12px; }
+  th, td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--edge); vertical-align:top; }
+  th { color:var(--faint); font-weight:500; font-size:10px; letter-spacing:.16em; }
+  td.pass { color:var(--aqua); white-space:nowrap; }
+  td.fail { color:var(--red); white-space:nowrap; }
+  td.err { color:var(--red); font-size:11px; }
+  .note { margin-top:18px; padding:12px 14px; border-left:2px solid var(--acc);
+          background:rgba(74,42,23,.35); color:var(--dim); font-size:11px; line-height:1.8; }
+  code { color:var(--txt); }
+  a { color:var(--acc); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>MIDI<span>_</span>LOOPER · WEB LOGIC TESTS</h1>
+  <p class="sub">
+    对 <code>web/engine.js</code> 跑与 <code>firmware/test/host/test_loop.cpp</code> 相同的场景：
+    小节/BPM clamp、首录、自动停、叠录相位、通道过滤、early stop、容量、停止/清空、ARMED 超时、拍点。
+  </p>
+
+  <div class="summary">
+    <div class="big" id="summary">RUNNING…</div>
+    <div class="meta" id="meta"></div>
+  </div>
+
+  <table>
+    <thead><tr><th>#</th><th>SCENARIO</th><th>RESULT</th></tr></thead>
+    <tbody id="rows"></tbody>
+  </table>
+
+  <div class="note">
+    这是 Looper 状态机/时基的 <b>Web 模型</b>，不是 ESP32 二进制；USB Host、ES8311、SD 和真机时序仍需上机验证。
+    固件侧的同一组场景另有 C++ host test：<code>firmware/test/host/test_loop.cpp</code>。
+  </div>
+</div>
+
+<script src="engine.js"></script>
+<script src="tests.js"></script>
+<script>
+  (function () {
+    const results = LoopTests.runTests();
+    const rows = document.getElementById('rows');
+    let failed = 0, passed = 0;
+
+    results.forEach((r, i) => {
+      const tr = document.createElement('tr');
+      const no = document.createElement('td');
+      no.textContent = String(i + 1).padStart(2, '0');
+      no.style.color = 'var(--faint)';
+      const name = document.createElement('td');
+      name.textContent = r.name;
+      const res = document.createElement('td');
+      res.className = r.pass ? 'pass' : 'fail';
+      res.textContent = r.pass ? 'PASS' : 'FAIL';
+      tr.appendChild(no);
+      tr.appendChild(name);
+      tr.appendChild(res);
+      if (!r.pass) {
+        const err = document.createElement('td');
+        err.className = 'err';
+        err.textContent = r.error;
+        tr.appendChild(err);
+        ++failed;
+      } else {
+        ++passed;
+      }
+      rows.appendChild(tr);
+    });
+
+    const summary = document.getElementById('summary');
+    summary.textContent = failed === 0 ? 'ALL PASS' : 'FAILED';
+    summary.className = 'big ' + (failed === 0 ? 'pass' : 'fail');
+    document.getElementById('meta').textContent =
+      passed + ' passed / ' + failed + ' failed / ' + results.length + ' total';
+  })();
+</script>
+</body>
+</html>

@@ -92,6 +92,70 @@
     state.toastAt = performance.now() + 2200;
   }
 
+  // The interactive preview drives the same LoopEngine model as test.html.
+  const engine = new LoopEngine();
+  engine.setBars(state.bars);
+  engine.setBpm(state.bpm * 10);
+
+  let demoAt = 0;
+  let demoNext = 0;
+  let demoSeq = 0;
+  let demoLane = 0;
+  const demoNotes = [];
+
+  function syncFromEngine() {
+    if (!state.live) return;
+    state.loop = engine.state;
+    state.bars = engine.bars;
+    state.bpm = Math.round(engine.bpmX10 / 10);
+    const total = engine.loopLenTicks();
+    state.phase = total ? Math.min(0.999, engine.phaseTick / total) : 0;
+    state.bar = Math.min(state.bars, Math.floor(engine.phaseTick / (480 * 4)) + 1);
+    const counts = engine.laneCounts();
+    for (let i = 0; i < 4; ++i) {
+      state.lanes[i].count = counts[i];
+      state.lanes[i].level = Math.min(1, counts[i] / 72);
+    }
+  }
+
+  function flushDemoNotes(now) {
+    for (const n of demoNotes) {
+      engine.onMidi(0x80 | n.ch, n.note, 0, now * 1000);
+    }
+    demoNotes.length = 0;
+  }
+
+  function feedDemo(now) {
+    if (engine.state === 'ARMED') {
+      if (now >= demoAt) {
+        // Simulated first MIDI note; this is what starts the take.
+        const ch = 0, note = 60;
+        engine.onMidi(0x90, note, 100, now * 1000);
+        demoNotes.push({ ch, note, until: now + 180 });
+        demoAt = Number.POSITIVE_INFINITY;
+      }
+      return;
+    }
+    if (engine.state !== 'REC') return;
+
+    if (now >= demoNext) {
+      demoNext = now + Math.max(80, 60000 / state.bpm / 2);
+      const lane = demoLane++ % 4;
+      const ch = [0, 1, 2, 9][lane];
+      const base = [60, 64, 48, 36][lane];
+      const note = base + (demoSeq++ % 3);
+      engine.onMidi(0x90 | ch, note, 90, now * 1000);
+      demoNotes.push({ ch, note, until: now + 140 });
+    }
+
+    for (let i = demoNotes.length - 1; i >= 0; --i) {
+      if (now >= demoNotes[i].until) {
+        engine.onMidi(0x80 | demoNotes[i].ch, demoNotes[i].note, 0, now * 1000);
+        demoNotes.splice(i, 1);
+      }
+    }
+  }
+
   // ------------------------------------------------------------ primitives
   function fill(x, y, w, h, c) {
     ctx.fillStyle = c;
@@ -341,30 +405,20 @@
 
   // ------------------------------------------------------------ animation
   let last = performance.now();
-  let evAcc = 0;
   function tick(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
 
-    if (state.live && (state.loop === 'PLAY' || state.loop === 'REC')) {
-      const totalBeats = state.bars * 4;
-      state.beatFloat += dt * (state.bpm / 60);
-      if (state.beatFloat >= totalBeats) state.beatFloat -= totalBeats;
-      state.phase = state.beatFloat / totalBeats;
-      state.bar = Math.floor(state.beatFloat / 4) + 1;
-
-      if (state.loop === 'REC') {
-        evAcc += dt;
-        if (evAcc > 0.22) {
-          evAcc = 0;
-          const lane = state.lanes[Math.floor(Math.random() * 4)];
-          lane.count += 1 + Math.floor(Math.random() * 2);
-          lane.level = Math.min(1, lane.count / 72);
-        }
+    if (state.live) {
+      engine.nowMs = now;
+      if (engine.state === 'REC' && engine.autoStop) flushDemoNotes(now);
+      engine.service(now);
+      feedDemo(now);              // ARMED: inject the simulated first note
+      if (engine.state === 'REC' || engine.state === 'PLAY') {
+        const frames = Math.max(1, Math.round(dt * 44100));
+        engine.pump(frames);
       }
-      for (const L of state.lanes) {
-        if (state.loop === 'REC' && L.count) L.level = Math.min(1, L.count / 72);
-      }
+      syncFromEngine();
     }
 
     draw();
@@ -390,34 +444,68 @@
   }
 
   function startRec() {
-    if (state.loop === 'REC' || state.loop === 'ARMED') { stopRec(); return; }
-    if (!state.lanes.some(l => l.count)) applyCounts([0, 0, 0, 0]);
-    state.loop = 'ARMED';
-    toast('WAIT MIDI...');
-    clearTimeout(startRec._t);
-    startRec._t = setTimeout(() => {
-      if (state.loop !== 'ARMED') return;
-      state.loop = 'REC';
-      state.phase = 0; state.beatFloat = 0; state.bar = 1;
-      toast('RECORDING');
-    }, 900);
+    const now = performance.now();
+    engine.nowMs = now;
+    if (engine.state === 'REC' || engine.state === 'ARMED') {
+      stopRec();
+      return;
+    }
+
+    flushDemoNotes(now);
+
+    if (engine.hasLoop()) {
+      engine.startOverdub();
+      demoAt = now;
+      demoNext = now;
+      toast('OVERDUB');
+    } else {
+      engine.startFirst();
+      demoAt = now + (state.countIn ? 4 * 60000 / state.bpm : 0);
+      demoNext = now;
+      toast(state.countIn ? 'COUNT IN' : 'WAIT MIDI...');
+    }
+    syncFromEngine();
   }
 
   function stopRec() {
-    clearTimeout(startRec._t);
-    if (state.loop === 'ARMED') { state.loop = 'STOP'; state.phase = 0; toast('CANCELED'); return; }
-    state.loop = state.lanes.some(l => l.count) ? 'PLAY' : 'STOP';
-    toast('LOOP ' + state.bars + ' BAR');
+    const now = performance.now();
+    engine.nowMs = now;
+    flushDemoNotes(now);
+    engine.stopRecord();
+    syncFromEngine();
+    toast(engine.state === 'PLAY' ? 'LOOP ' + state.bars + ' BAR' : 'CANCELED');
   }
 
   function togglePlay() {
-    if (state.loop === 'PLAY') { state.loop = 'STOP'; state.phase = 0; state.bar = 1; toast('STOPPED'); }
-    else if (state.loop === 'REC' || state.loop === 'ARMED') { stopRec(); }
-    else { state.loop = 'PLAY'; toast('PLAYING'); }
+    const now = performance.now();
+    engine.nowMs = now;
+    flushDemoNotes(now);
+
+    if (engine.state === 'PLAY') {
+      engine.stop();
+      toast('STOPPED');
+    } else if (engine.state === 'REC' || engine.state === 'ARMED') {
+      engine.stopRecord();
+      toast(engine.state === 'PLAY' ? 'LOOP ' + state.bars + ' BAR' : 'STOPPED');
+    } else if (!engine.play()) {
+      toast('NO LOOP');
+    } else {
+      toast('PLAYING');
+    }
+    syncFromEngine();
   }
 
   function save() {
-    if (!state.lanes.some(l => l.count)) { toast('NOTHING TO SAVE'); return; }
+    const now = performance.now();
+    engine.nowMs = now;
+    flushDemoNotes(now);
+    if (engine.state === 'REC' || engine.state === 'ARMED') engine.stopRecord();
+    if (!engine.hasLoop()) {
+      toast('NOTHING TO SAVE');
+      return;
+    }
+    engine.stop();
+    syncFromEngine();
     const name = 'LOOP_' + String(state.files.length + 1).padStart(4, '0') + '.MID';
     state.files.unshift({ name, size: '6K' });
     toast('SAVED ' + name);
@@ -437,17 +525,38 @@
     toast('RENAMED');
   }
 
+  function changeBars(n) {
+    if (engine.state === 'REC' || engine.state === 'ARMED') { toast('RECORDING'); return false; }
+    if (engine.hasLoop()) { toast('CLEAR FIRST'); return false; }
+    engine.setBars(n);
+    state.bars = engine.bars;
+    state.bar = 1;
+    state.phase = 0;
+    return true;
+  }
+
+  function changeBpm(v) {
+    if (engine.state === 'REC' || engine.state === 'ARMED') { toast('RECORDING'); return false; }
+    state.bpm = Math.max(40, Math.min(240, Math.round(v)));
+    engine.setBpm(state.bpm * 10);
+    return true;
+  }
+
   function adjust(delta) {
     if (state.settings) {
-      if (state.settingsRow === 0) state.bpm = Math.max(40, Math.min(240, state.bpm + delta));
-      else if (state.settingsRow === 1) {
+      if (state.settingsRow === 0) {
+        changeBpm(state.bpm + delta * 5);
+      } else if (state.settingsRow === 1) {
         const opts = [1, 2, 4, 8, 16, 32];
         const i = opts.indexOf(state.bars);
-        state.bars = opts[Math.max(0, Math.min(opts.length - 1, i + delta))];
-      } else if (state.settingsRow === 2) state.click = !state.click;
-      else state.countIn = state.countIn ? 0 : 1;
+        changeBars(opts[Math.max(0, Math.min(opts.length - 1, i + delta))]);
+      } else if (state.settingsRow === 2) {
+        state.click = !state.click;
+      } else {
+        state.countIn = state.countIn ? 0 : 1;
+      }
     } else if (state.tab === 'LOOP') {
-      state.bpm = Math.max(40, Math.min(240, state.bpm + delta));
+      changeBpm(state.bpm + delta);
     }
   }
 
@@ -458,10 +567,28 @@
     if (k === 'r' || k === 'R' || k === ' ') { e.preventDefault(); startRec(); return; }
     if (k === 'Enter') { e.preventDefault(); togglePlay(); return; }
     if (k === 's' || k === 'S') { save(); return; }
+    if (k === 'c' || k === 'C') {
+      demoNotes.length = 0;
+      engine.clear();
+      syncFromEngine();
+      toast('CLEARED');
+      return;
+    }
+    if (k === 'g' || k === 'G') { state.settings = !state.settings; return; }
     if (k === 'm' || k === 'M') { state.click = !state.click; toast(state.click ? 'CLICK ON' : 'CLICK OFF'); return; }
     if (k >= '1' && k <= '4') { state.selectedLane = Number(k) - 1; return; }
-    if (k === 'ArrowUp') { e.preventDefault(); if (state.settings) state.settingsRow = (state.settingsRow + 3) % 4; else state.bars = Math.min(32, state.bars * 2); return; }
-    if (k === 'ArrowDown') { e.preventDefault(); if (state.settings) state.settingsRow = (state.settingsRow + 1) % 4; else state.bars = Math.max(1, state.bars / 2); return; }
+    if (k === 'ArrowUp') {
+      e.preventDefault();
+      if (state.settings) state.settingsRow = (state.settingsRow + 3) % 4;
+      else changeBars(state.bars * 2);
+      return;
+    }
+    if (k === 'ArrowDown') {
+      e.preventDefault();
+      if (state.settings) state.settingsRow = (state.settingsRow + 1) % 4;
+      else changeBars(state.bars / 2);
+      return;
+    }
     if (k === 'ArrowLeft') { e.preventDefault(); adjust(-1); return; }
     if (k === 'ArrowRight') { e.preventDefault(); adjust(+1); return; }
     if (k === 'd' || k === 'D') { if (state.tab === 'FILE') delFile(); return; }
@@ -472,20 +599,42 @@
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
   on('btnRec', startRec);
   on('btnPlay', togglePlay);
-  on('btnStop', () => { clearTimeout(startRec._t); state.loop = 'STOP'; state.phase = 0; state.bar = 1; state.beatFloat = 0; toast('STOPPED'); });
+  on('btnStop', () => {
+    const now = performance.now();
+    engine.nowMs = now;
+    flushDemoNotes(now);
+    engine.stop();
+    syncFromEngine();
+    toast('STOPPED');
+  });
   on('btnLoop', () => { state.tab = 'LOOP'; });
   on('btnFile', () => { state.tab = 'FILE'; });
   on('btnSettings', () => { state.settings = !state.settings; });
+  on('btnTest', () => { window.open('test.html', '_blank'); });
   on('btnClick', () => { state.click = !state.click; });
   const bpmEl = document.getElementById('bpm');
-  if (bpmEl) bpmEl.addEventListener('input', e => { state.bpm = Number(e.target.value); });
+  if (bpmEl) bpmEl.addEventListener('input', e => { changeBpm(Number(e.target.value)); });
   document.querySelectorAll('#barBtns button').forEach(b => {
     b.addEventListener('click', () => {
-      state.bars = Number(b.dataset.bars);
-      state.bar = 1; state.phase = 0; state.beatFloat = 0;
+      if (!changeBars(Number(b.dataset.bars))) return;
       document.querySelectorAll('#barBtns button').forEach(x => x.classList.toggle('on', x === b));
     });
   });
+
+  // Debug hook for the CDP-driven web smoke test.
+  if (params.get('debug') === '1') {
+    window.__looper = {
+      engine,
+      state,
+      startRec,
+      stopRec,
+      togglePlay,
+      save,
+      changeBars,
+      changeBpm,
+      syncFromEngine,
+    };
+  }
 
   // initial frame
   requestAnimationFrame(tick);

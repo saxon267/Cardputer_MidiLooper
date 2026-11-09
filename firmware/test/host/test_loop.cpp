@@ -211,6 +211,101 @@ static void testClearAndStop()
     CHECK(e.state() == LoopState::STOP);
 }
 
+static void testEarlyStopKeepsLength()
+{
+    LoopEngine e;
+    resetEngine(e, 4, 1200);
+
+    CHECK(e.startFirst());
+    g_test_us = 1000;
+    noteOn(e, 0, 60, 100);
+    block(e, 300);                  // well before the end of 4 bars
+    g_test_us += 500000;
+    noteOff(e, 0, 60);
+    e.stopRecord();
+
+    CHECK(e.state() == LoopState::PLAY);
+    CHECK(e.loopLenTicks() == 4u * 4u * 480u);  // bars unchanged
+    CHECK(e.positionTicks() == 0);              // restarts at 0
+    CHECK(e.count() >= 2);
+}
+
+static void testOverdubFromStop()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+
+    CHECK(e.startFirst());
+    g_test_us = 1000;
+    noteOn(e, 0, 60, 100);
+    g_test_us += 1000000;
+    noteOff(e, 0, 60);
+    block(e, 100);
+    e.stopRecord();
+    e.stop();
+
+    const int base = e.count();
+    CHECK(e.startOverdub());
+    CHECK(e.state() == LoopState::REC);
+    CHECK(e.positionTicks() == 0);
+
+    const uint8_t flags = block(e, 1);
+    CHECK((flags & 0x03) == 0x03);  // downbeat pulse on restart
+
+    noteOn(e, 1, 67, 90);
+    e.stopRecord();
+    CHECK(e.count() == base + 1);
+    CHECK(e.laneCount(1) == 1);
+}
+
+static void testCapacity()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+
+    CHECK(e.startFirst());
+    g_test_us = 1000;
+    noteOn(e, 0, 60, 100);
+    for (int i = 1; i < MAX_LOOP_EVENTS; ++i) {
+        noteOn(e, 0, (uint8_t)((i % 12) + 60), 100);
+    }
+    CHECK(e.laneCount(0) == MAX_LOOP_EVENTS);
+
+    noteOn(e, 0, 72, 100);          // one too many
+    CHECK(e.overflow());
+    e.service();
+    CHECK(e.state() == LoopState::PLAY);
+    CHECK(e.count() == MAX_LOOP_EVENTS);
+}
+
+static void testBeatFlags()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+
+    CHECK(e.startFirst());
+    g_test_us = 1000;
+    noteOn(e, 0, 60, 100);
+    block(e, 100);
+    g_test_us += 1000000;
+    noteOff(e, 0, 60);
+    block(e, 100);
+    e.stopRecord();
+
+    CHECK(e.play());
+    uint8_t f = block(e, 1);
+    CHECK((f & 0x03) == 0x03);      // start accent
+
+    int normal = 0, accent = 0;
+    for (int i = 0; i < 400; ++i) {
+        f = block(e, 1);
+        if (f & 0x02) ++accent;
+        else if (f & 0x01) ++normal;
+    }
+    CHECK(normal == 1);             // one beat at 480 ticks, no bar accent yet
+    CHECK(accent == 0);
+}
+
 static void testArmTimeout()
 {
     LoopEngine e;
@@ -230,6 +325,10 @@ int main()
     testAutoStopAtLoopEnd();
     testOverdubMergesAtCurrentPhase();
     testChannelFilterAndLaneMapping();
+    testEarlyStopKeepsLength();
+    testOverdubFromStop();
+    testCapacity();
+    testBeatFlags();
     testClearAndStop();
     testArmTimeout();
 
