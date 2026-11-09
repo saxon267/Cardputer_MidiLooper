@@ -26,6 +26,8 @@ struct App {
 
     uint16_t laneCount[4] = {0, 0, 0, 0};
     bool     laneMuted[4] = {false, false, false, false};
+    volatile uint32_t laneFlash[4] = {0, 0, 0, 0};
+    bool     loopMode = false;
     uint16_t phasePermille = 0;
     uint16_t barNow       = 1;
     bool     hasLoop      = false;

@@ -71,6 +71,12 @@ static void onUsbConnect(bool connected, void*)
 
 static void onUsbMidi(uint8_t status, uint8_t d1, uint8_t d2, void*)
 {
+    if ((status & 0xF0) == 0x90 && d2 > 0 &&
+        (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED)) {
+        const uint8_t ch = status & 0x0F;
+        const int lane = (ch == 0) ? 0 : (ch == 1) ? 1 : (ch == 2) ? 2 : (ch == 9) ? 3 : -1;
+        if (lane >= 0) app.laneFlash[lane] = millis();
+    }
     looper.onMidi(status, d1, d2, (uint32_t)micros());
 }
 
@@ -81,6 +87,7 @@ static void syncApp()
     app.overdub       = looper.isOverdub();
     app.takeFull      = looper.takeFull();
     app.overflow      = looper.overflow();
+    app.loopMode      = looper.loopMode();
     app.phasePermille = (uint16_t)looper.phasePermille();
 
     const uint32_t barLen = (uint32_t)LOOP_PPQN * LOOP_BEATS;
@@ -372,6 +379,13 @@ static void toggleClick()
     setToast(app.click ? "CLICK ON" : "CLICK OFF");
 }
 
+static void toggleLoopMode()
+{
+    const bool on = looper.toggleLoopMode();
+    prefs.putBool("loop", on);
+    setToast(on ? "LOOP MODE ON" : "LOOP MODE OFF");
+}
+
 static void cycleQuantize(int dir)
 {
     int q = (int)app.quantize + dir;
@@ -419,7 +433,7 @@ static void handleKeys()
     static bool pEnter = false, pSpace = false, pDel = false, pTab = false;
     static bool pUp = false, pDown = false, pLeft = false, pRight = false;
     static bool pR = false, pS = false, pM = false, pG = false, pC = false;
-    static bool pD = false, pN = false, pMinus = false, pPlus = false, pU = false;
+    static bool pD = false, pN = false, pMinus = false, pPlus = false, pU = false, pL = false;
     static bool pD1 = false, pD2 = false, pD3 = false, pD4 = false;
 
     const bool enter = ks.enter;
@@ -438,6 +452,7 @@ static void handleKeys()
     const bool dkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('d');
     const bool nkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('n');
     const bool ukey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('u');
+    const bool lkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('l');
     const bool minus = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('-');
     const bool plus  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('=');
     const bool d1 = M5Cardputer.Keyboard.isKeyPressed('1');
@@ -461,6 +476,7 @@ static void handleKeys()
     const bool eD = dkey && !pD;
     const bool eN = nkey && !pN;
     const bool eU = ukey && !pU;
+    const bool eL = lkey && !pL;
     const bool eMinus = minus && !pMinus;
     const bool ePlus  = plus && !pPlus;
     const bool eD1 = d1 && !pD1;
@@ -472,6 +488,7 @@ static void handleKeys()
     pUp = up; pDown = down; pLeft = left; pRight = right;
     pR = rkey; pS = skey; pM = mkey; pG = gkey; pC = ckey;
     pD = dkey; pN = nkey; pMinus = minus; pPlus = plus; pU = ukey;
+    pL = lkey;
     pD1 = d1; pD2 = d2; pD3 = d3; pD4 = d4;
 
     if (app.renaming) {
@@ -547,6 +564,7 @@ static void handleKeys()
         if (eS) saveLoop();
         if (eC) clearLoop();
         if (eM) toggleClick();
+        if (eL) toggleLoopMode();
         if (eU) {
             const bool ok = looper.undo();
             syncApp();
@@ -660,6 +678,7 @@ void setup()
     app.countIn = prefs.getBool("cnt", true);
     app.quantize = prefs.getUChar("quant", Q_1_16);
     app.swing    = prefs.getUChar("swing", 50);
+    app.loopMode = prefs.getBool("loop", false);
     if (app.quantize > Q_1_32) app.quantize = Q_1_16;
     if (app.swing < 50) app.swing = 50;
     if (app.swing > 75) app.swing = 75;
@@ -681,6 +700,7 @@ void setup()
     looper.setBpm(app.bpmX10);
     looper.setQuantize(app.quantize);
     looper.setSwing(app.swing);
+    looper.setLoopMode(app.loopMode);
     looper.setSink(emitEvent);
 
     audio.start();
@@ -757,11 +777,17 @@ void loop()
         if (b >= 0 && b <= 100) app.battery = (uint8_t)b;
     }
 
-    static uint32_t lastRender = 0;
-    if (millis() - lastRender >= 100) {
-        lastRender = millis();
+    static uint32_t lastCounts = 0;
+    if (millis() - lastCounts >= 100) {
+        lastCounts = millis();
         looper.laneCounts(app.laneCount);
         for (int i = 0; i < 4; ++i) app.laneMuted[i] = looper.mute((uint8_t)i);
+    }
+
+    // 30 fps so the recording lanes can visibly pulse with incoming notes.
+    static uint32_t lastRender = 0;
+    if (millis() - lastRender >= 33) {
+        lastRender = millis();
         ui.render();
     }
 

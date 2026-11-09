@@ -9,6 +9,7 @@
 | `S` | 保存 `/MidiLoop/LOOP_xxxx.MID` |
 | `C` | 清空当前轨道（不删除 `.mid` 文件） |
 | `U` | 撤销最后一次叠录（叠录中 = 取消当前 take） |
+| `L` | Loop 模式：到循环末尾自动续录（不用再按 R） |
 | `Fn` + `1..4` | Mute / Unmute CH1 / CH2 / CH3 / CH10 |
 | `M` | 节拍器开 / 关 |
 | `G` | 设置浮层 |
@@ -50,6 +51,8 @@
 `STOP` → 按 R → `ARMED`（count-in 4 拍）→ 首个 MIDI → `REC` → 录满/再按 R → `PLAY`。
 `PLAY` 按 R → `OVERDUB`（立即按当前相位）→ 再按 R/循环末尾 → `PLAY`。
 `U` → 撤销最后一次叠录；`C` → 清空当前轨道（不删文件）；`Fn` + `1..4` → Mute。
+`L` → Loop 模式：第一遍结束后自动进入下一遍 overdub，手动 R 停止续录。
+录音时收到 note-on 的 lane 会闪动 90 ms，跟随输入节奏。
 
 Quantize 默认 1/16（120 ticks），SWING 默认 50；两者都在设置浮层里改。
 

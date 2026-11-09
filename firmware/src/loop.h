@@ -64,6 +64,10 @@ public:
     bool mute(uint8_t lane) const;
     bool toggleMute(uint8_t lane);
 
+    void setLoopMode(bool on);
+    bool loopMode() const { return _loopMode; }
+    bool toggleLoopMode();
+
     void onMidi(uint8_t status, uint8_t d1, uint8_t d2, uint32_t nowUs);
     uint8_t pump(uint32_t frames);  // audio task: advance clock + dispatch
 
@@ -138,6 +142,7 @@ private:
     uint8_t  _swing    = 50;
     uint8_t  _gen      = 1;
     volatile bool _mute[4] = {false, false, false, false};
+    volatile bool _loopMode = false;
     mutable uint16_t _lastOn[4][128] = {};
 
     UndoEntry _undo[8] = {};

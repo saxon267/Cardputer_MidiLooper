@@ -23,6 +23,7 @@ void LoopEngine::begin()
     _gen = 1;
     _undoTop = 0;
     for (int i = 0; i < 4; ++i) _mute[i] = false;
+    _loopMode = false;
     resetLastOn();
 }
 
@@ -341,6 +342,17 @@ bool LoopEngine::toggleMute(uint8_t lane)
     return _mute[lane];
 }
 
+void LoopEngine::setLoopMode(bool on)
+{
+    _loopMode = on;
+}
+
+bool LoopEngine::toggleLoopMode()
+{
+    _loopMode = !_loopMode;
+    return _loopMode;
+}
+
 void LoopEngine::service()
 {
     if (_state == LoopState::ARMED) {
@@ -361,6 +373,11 @@ void LoopEngine::service()
         portEXIT_CRITICAL(&_mux);
         if (over) finishOverdub();
         else      finishFirst();
+
+        // Loop mode: the next pass starts overdubbing automatically.
+        if (_loopMode && !_overflow && !_takeFull && hasLoop()) {
+            startOverdub();
+        }
     }
 }
 

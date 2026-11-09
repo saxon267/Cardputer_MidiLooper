@@ -52,6 +52,7 @@
       this.gen = 1;
       this.undoStack = [];      // { gen, count }
       this.muteLanes = [false, false, false, false];
+      this.loopMode = false;
       this.lastOn = Array.from({ length: 4 }, () => new Array(128).fill(-1));
     }
 
@@ -146,6 +147,13 @@
       if (lane < 0 || lane >= 4) return false;
       this.muteLanes[lane] = !this.muteLanes[lane];
       return this.muteLanes[lane];
+    }
+
+    setLoopMode(on) { this.loopMode = !!on; }
+
+    toggleLoopMode() {
+      this.loopMode = !this.loopMode;
+      return this.loopMode;
     }
 
     load(events, bars) {
@@ -313,6 +321,9 @@
         this.state = State.STOP;
         if (over) this.finishOverdub();
         else this.finishFirst();
+        if (this.loopMode && !this.overflow && this.hasLoop()) {
+          this.startOverdub();
+        }
       }
     }
 

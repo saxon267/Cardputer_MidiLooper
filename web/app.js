@@ -23,14 +23,15 @@
     countIn: 1,
     quantize: 3,          // OFF=0, 1/4=1, 1/8=2, 1/16=3, 1/32=4
     swing: 50,
+    loopMode: false,
     bar: 1,
     phase: 0,
     selectedLane: 0,
     lanes: [
-      { ch: 1,  name: 'LEAD', color: C.acc,  count: 0, on: true, muted: false, level: 0 },
-      { ch: 2,  name: 'PAD',  color: C.aqua, count: 0, on: true, muted: false, level: 0 },
-      { ch: 3,  name: 'BASS', color: C.amb,  count: 0, on: true, muted: false, level: 0 },
-      { ch: 10, name: 'DRUM', color: C.blue, count: 0, on: true, muted: false, level: 0 },
+      { ch: 1,  name: 'LEAD', color: C.acc,  count: 0, on: true, muted: false, flash: 0, level: 0 },
+      { ch: 2,  name: 'PAD',  color: C.aqua, count: 0, on: true, muted: false, flash: 0, level: 0 },
+      { ch: 3,  name: 'BASS', color: C.amb,  count: 0, on: true, muted: false, flash: 0, level: 0 },
+      { ch: 10, name: 'DRUM', color: C.blue, count: 0, on: true, muted: false, flash: 0, level: 0 },
     ],
     files: [
       { name: 'LOOP_0001.MID', size: '12K' },
@@ -100,6 +101,7 @@
   engine.setBpm(state.bpm * 10);
   engine.setQuantize(state.quantize);
   engine.setSwing(state.swing);
+  engine.setLoopMode(state.loopMode);
 
   let demoAt = 0;
   let demoNext = 0;
@@ -112,6 +114,7 @@
     state.loop = engine.state;
     state.bars = engine.bars;
     state.bpm = Math.round(engine.bpmX10 / 10);
+    state.loopMode = engine.loopMode;
     const total = engine.loopLenTicks();
     state.phase = total ? Math.min(0.999, engine.phaseTick / total) : 0;
     state.bar = Math.min(state.bars, Math.floor(engine.phaseTick / (480 * 4)) + 1);
@@ -136,6 +139,7 @@
         // Simulated first MIDI note; this is what starts the take.
         const ch = 0, note = 60;
         engine.onMidi(0x90, note, 100, now * 1000);
+        state.lanes[0].flash = performance.now();
         demoNotes.push({ ch, note, until: now + 180 });
         demoAt = Number.POSITIVE_INFINITY;
       }
@@ -150,6 +154,7 @@
       const base = [60, 64, 48, 36][lane];
       const note = base + (demoSeq++ % 3);
       engine.onMidi(0x90 | ch, note, 90, now * 1000);
+      state.lanes[lane].flash = performance.now();
       demoNotes.push({ ch, note, until: now + 140 });
     }
 
@@ -270,19 +275,25 @@
     const L = state.lanes[i];
     const sel = state.selectedLane === i;
     const muted = !!L.muted;
+    const flash = L.flash && performance.now() - L.flash < 90;
     if (sel) {
       fill(2, y, 236, 17, C.pad);
       fill(2, y, 2, 17, L.color);
     }
-    text(7, y + 5, 'CH' + L.ch, muted ? C.faint : L.color, true);
-    text(37, y + 5, L.name, sel ? C.txt : C.dim, sel);
+    if (flash) {
+      fill(2, y, 236, 17, C.pad);
+      hline(2, y + 16, 236, L.color);
+    }
+    text(7, y + 5, 'CH' + L.ch, flash ? C.txt : (muted ? C.faint : L.color), true);
+    text(37, y + 5, L.name, flash ? C.txt : (sel ? C.txt : C.dim), sel);
 
     // 18-cell meter
     const mx = 68, my = y + 5, cw = 5, cg = 1;
     fill(mx, my, 18 * (cw + cg) - cg, 6, C.line);
     const lit = Math.round((L.level || 0) * 18);
     for (let s = 0; s < 18; ++s) {
-      fill(mx + s * (cw + cg), my, cw, 6, s < lit ? (muted ? C.faint : L.color) : C.line);
+      const on = flash ? C.txt : (muted ? C.faint : L.color);
+      fill(mx + s * (cw + cg), my, cw, 6, s < lit ? on : C.line);
     }
 
     textR(204, y + 5, L.count ? String(L.count) : '--', C.dim);
@@ -297,6 +308,7 @@
     const col = state.loop === 'REC' ? C.red : state.loop === 'PLAY' ? C.green
               : state.loop === 'ARMED' ? C.amb : C.faint;
     text(20, y + 1, label, col, true);
+    if (state.loopMode) text(68, y + 1, 'LOOP', C.amb, true);
 
     text(96, y + 1, 'BAR ' + state.bar + '/' + state.bars, C.txt, true);
     textR(234, y + 1, state.bpm + ' BPM', C.dim);
@@ -601,6 +613,12 @@
       return;
     }
     if (k === 'g' || k === 'G') { state.settings = !state.settings; return; }
+    if (k === 'l' || k === 'L') {
+      const on = engine.toggleLoopMode();
+      syncFromEngine();
+      toast(on ? 'LOOP MODE ON' : 'LOOP MODE OFF');
+      return;
+    }
     if (k === 'm' || k === 'M') { state.click = !state.click; toast(state.click ? 'CLICK ON' : 'CLICK OFF'); return; }
     if (k === 'u' || k === 'U') {
       const now = performance.now();

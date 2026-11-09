@@ -377,6 +377,24 @@
       eq(e.events[1].tick, 240);
     });
 
+    test('loop mode auto-starts the next overdub', () => {
+      const e = fresh(1, 1200);
+      e.setQuantize(QuantizeGrid.OFF);
+      e.setLoopMode(true);
+      e.startFirst();
+      e.onMidi(0x90, 60, 100, 0);
+      block(e, 1400);                    // reach loop end
+      assert(e.autoStop, 'auto-stop due');
+      e.service(e.nowMs);
+      eq(e.state, LoopState.REC);
+      assert(e.overdub, 'next pass is overdub');
+      assert(e.loopMode, 'loop mode stays on');
+
+      e.stopRecord();                    // manual R stops the chain
+      eq(e.state, LoopState.PLAY);
+      eq(e.count(), 1);
+    });
+
     return results;
   }
 

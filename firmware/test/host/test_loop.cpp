@@ -191,6 +191,28 @@ static void testChannelFilterAndLaneMapping()
     CHECK(!LoopEngine::channelAllowed(4));
 }
 
+static void testLoopMode()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+    e.setQuantize(Q_OFF);
+    e.setLoopMode(true);
+    CHECK(e.loopMode());
+
+    CHECK(e.startFirst());
+    g_test_us = 0;
+    noteOn(e, 0, 60, 100);
+    block(e, 1400);
+    e.service();
+    CHECK(e.state() == LoopState::REC);
+    CHECK(e.isOverdub());
+    CHECK(e.loopMode());
+    CHECK(e.count() == 1);
+
+    e.stopRecord();                    // manual R ends the chain
+    CHECK(e.state() == LoopState::PLAY);
+}
+
 static void testClearAndStop()
 {
     LoopEngine e;
@@ -512,6 +534,7 @@ int main()
     testUndo();
     testMute();
     testLoad();
+    testLoopMode();
     testClearAndStop();
     testArmTimeout();
 

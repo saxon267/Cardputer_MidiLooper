@@ -2,7 +2,7 @@
 
 240×135、Gruvbox Dark 的四通道 MIDI 循环叠录固件。Cardputer-Adv 作为 **USB-C Host** 直连 M-VAVE FM-1（Sloop），把 FM-1 的 CH1/2/3/10 录成循环，叠录后回放给 FM-1 发声。
 
-> **状态**：v1.0.0 已发布（上机确认可用）；main 上的 **v1.0.1 是 4 轨 seq 丢音修复候选，尚未发版**。  
+> **状态**：v1.0.0 已发布（上机确认可用）；main 上的 **v1.1.0 是 4 轨 seq 丢音修复 + Loop 模式 + 录制闪动候选，尚未发版**。  
 > **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.0.0>
 
 ![LOOP 播放](docs/ui/loop-play.png)
@@ -19,6 +19,8 @@
 | Quantize | `onMidi()` 入口把 note-on / CC / PB 的 tick 吸附到网格（默认 1/16）；note-off 保留原始时长 |
 | Swing | 50–75%；播放时对奇数 8 分格的事件动态加 tick 偏移，不改存储 |
 | Undo | `U` 撤销最后一次叠录；按 take generation 过滤，不会误删旧事件 |
+| Loop 模式 | `L` 开启/关闭；第一遍结束后自动进入下一遍 overdub，不用再按 `R` |
+| 录制闪动 | `REC` / `OVERDUB` 时，收到音符的 lane 行随节奏闪动 |
 | 文件播放 | FILE 页 `Enter` 载入 `/MidiLoop` 里的 `.mid`，按文件 tempo/bars 播放 |
 | Mute | `Fn` + `1..4` 切换 CH1/2/3/10 静音；播放跳过该 lane，并 allNotesOff 防挂音 |
 | 通道 | CH1 LEAD / CH2 PAD / CH3 BASS / CH10 DRUM，四 lane 同长度 |
@@ -83,7 +85,7 @@ FILE 页：`/MIDILOOP` 路径、文件数、6 行列表（文件名 + 大小）�
 
 ### 3.1 Web 逻辑自检
 
-[web/test.html](<web/test.html>) 直接跑 **16 个场景**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤、early stop、8192 容量、停止/清空、ARMED 超时、拍点、Quantize、Swing、Undo、Mute、文件载入。当前结果 **ALL PASS**。
+[web/test.html](<web/test.html>) 直接跑 **17 个场景**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤、early stop、8192 容量、停止/清空、ARMED 超时、拍点、Quantize、Swing、Undo、Mute、文件载入、Loop 模式。当前结果 **ALL PASS**。
 
 ![Web logic tests](docs/ui/logic-tests.png)
 
@@ -94,7 +96,7 @@ node web/test/run-node.js
 # RESULT OK
 ```
 
-`pwsh tools/web-smoke.ps1` 会启动 headless Edge，通过 CDP 真实点击/按键走一遍交互流程（count-in → REC → 自动停 → MUTE → OVERDUB → UNDO → SAVE → CLEAR → early stop → BARS 保护），当前 **21 项检查全通过**。
+`pwsh tools/web-smoke.ps1` 会启动 headless Edge，通过 CDP 真实点击/按键走一遍交互流程（count-in → REC → 自动停 → MUTE → OVERDUB → UNDO → SAVE → CLEAR → early stop → BARS 保护 → LOOP MODE），当前 **23 项检查全通过**。
 
 > 这验证的是 Web 模型（`web/engine.js`）与 UI 交互契约；固件侧的 C++ 实现对同一组场景另有 host test（第 9 节）。两者都通过，但仍**不能替代** USB/ES8311/SD 的真机验证。
 
@@ -111,6 +113,7 @@ node web/test/run-node.js
 | `S` | 保存为 `/MidiLoop/LOOP_xxxx.MID`（会先停止播放） |
 | `C` | 清空当前轨道（**不删除** `.mid` 文件） |
 | `U` | 撤销最后一次叠录（叠录中按 U 取消当前 take） |
+| `L` | Loop 模式开 / 关（自动续录，不用反复按 R） |
 | `Fn` + `1` / `2` / `3` / `4` | Mute / Unmute CH1 / CH2 / CH3 / CH10 |
 | `M` | 节拍器开 / 关 |
 | `G` | 打开设置浮层 |
@@ -161,6 +164,8 @@ node web/test/run-node.js
 11. **Undo**：每次进入叠录取一个 take generation；`U` 过滤掉该 generation 的事件。因为叠录是排序合并，不能简单按数量截断，否则会误删旧事件。
 12. **文件播放**：FILE 页 `Enter` 读取 SMF（Format 0/1、480 PPQN 转换、tempo、EOT），载入 inactive buffer 后提交并播放；`C` 只清 RAM 轨道，`.mid` 文件保留。
 13. **Mute**：`Fn` + `1..4` 切换；pump 跳过该 lane 的事件，并在静音瞬间对该通道发 `allNotesOff`，避免正在响的音挂住。Mute 只影响回放，保存仍包含全部事件。
+14. **Loop 模式**：`L` 开关（NVS 保存）。开启后，每次到循环末尾自动进入下一遍 overdub，不需要再按 `R`；手动按 `R` 仍会结束当前 take 并停止自动续录。事件满时不会继续自动续录。
+15. **录制闪动**：`REC` / `OVERDUB` 中收到 note-on 时，对应 lane 行闪 90 ms；UI 以 30 fps 渲染，闪动跟随输入音符的节奏。
 
 ---
 
@@ -218,8 +223,8 @@ firmware/src/
 
 | 项 | 值 |
 |---|---:|
-| 静态 RAM | 210,092 B / 327,680 B（64.1%，1.0.1 候选；v1.0.0 为 209,060） |
-| Flash | 678,553 B / 3,145,728 B（21.6%，1.0.1 候选；v1.0.0 为 677,897） |
+| 静态 RAM | 210,116 B / 327,680 B（64.1%，1.1.0 候选；v1.0.0 为 209,060） |
+| Flash | 679,477 B / 3,145,728 B（21.6%，1.1.0 候选；v1.0.0 为 677,897） |
 | 循环事件 | 2 × 8192 × 8 B + 4096 × 8 B = 160 KB |
 | UI sprite | 240 × 135 × 16 bpp = 64.8 KB（堆） |
 | 音频 | 44.1 kHz / 64 帧块 / 6 DMA |
@@ -280,7 +285,7 @@ test_loop.exe
 4. **Sloop**：`OUT=SEQ`、`ARP 2 → HOLD=OFF`；HOLD 打开时停止会挂音，也会污染下一次录音。
 5. **事件上限**：4 轨 16 分在 32 小节约 4096 个事件，通常够；4 轨 32 分或大量 CC/PB 会到 8192。
 
-> 上述 note-off 量化修复在 **v1.0.1 候选**（main）中，尚未重新发版；验证通过后发 `v1.0.1`。
+> 上述 note-off 量化修复在 **v1.1.0 候选**（main）中，尚未重新发版；验证通过后发 `v1.1.0`。
 
 ---
 

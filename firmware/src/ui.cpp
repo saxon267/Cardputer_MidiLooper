@@ -172,20 +172,27 @@ void UI::laneRow(int i, int y)
 
     const bool sel = (app.selectedLane == i);
     const bool muted = app.laneMuted[i];
+    const bool flash = app.laneFlash[i] &&
+                       (uint32_t)(millis() - app.laneFlash[i]) < 90;
     if (sel) {
         rect(2, y, 236, 17, C_PAD);
         rect(2, y, 2, 17, cols[i]);
     }
+    if (flash) {
+        rect(2, y, 236, 17, C_PAD);
+        hline(2, y + 16, 236, cols[i]);
+    }
 
-    textf(7, y + 5, muted ? C_FAINT : cols[i], true, 1, "CH%d", chs[i]);
-    text(37, y + 5, names[i], sel ? C_TXT : C_DIM, sel);
+    textf(7, y + 5, flash ? C_TXT : (muted ? C_FAINT : cols[i]), true, 1, "CH%d", chs[i]);
+    text(37, y + 5, names[i], flash ? C_TXT : (sel ? C_TXT : C_DIM), sel);
 
     const int mx = 68, my = y + 5, cw = 5, cg = 1;
     rect(mx, my, 18 * (cw + cg) - cg, 6, C_LINE);
     int lit = (int)app.laneCount[i] * 18 / 72;
     if (lit > 18) lit = 18;
     for (int s = 0; s < 18; ++s) {
-        rect(mx + s * (cw + cg), my, cw, 6, s < lit ? (muted ? C_FAINT : cols[i]) : C_LINE);
+        const uint16_t on = flash ? C_TXT : (muted ? C_FAINT : cols[i]);
+        rect(mx + s * (cw + cg), my, cw, 6, s < lit ? on : C_LINE);
     }
 
     if (app.laneCount[i]) {
@@ -231,6 +238,7 @@ void UI::drawLoop()
     }
 
     text(20, y + 1, label, col, true);
+    if (app.loopMode) text(68, y + 1, "LOOP", C_AMB, true);
     textf(96, y + 1, C_TXT, true, 1, "BAR %u/%u", app.barNow, app.bars);
     char bpm[12];
     snprintf(bpm, sizeof(bpm), "%u BPM", app.bpmX10 / 10);

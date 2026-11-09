@@ -77,6 +77,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       phase: L.engine.phasePermille(),
       lanes: L.engine.laneCounts(),
       mutes: [0, 1, 2, 3].map(i => L.engine.mute(i)),
+      loopMode: L.engine.loopMode,
       files: L.state.files.length,
     };
   })()`);
@@ -170,6 +171,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   // Changing bars while a loop exists must be rejected.
   const rejected = await evaluate('window.__looper.changeBars(8) === false');
   check(rejected === true, 'change bars with loop → CLEAR FIRST');
+
+  // L toggles loop mode (auto-overdub at the next loop boundary).
+  await evaluate(key('l'));
+  await sleep(120);
+  s = await snap();
+  check(s && s.loopMode === true, 'L → LOOP MODE ON');
+  await evaluate(key('l'));
+  await sleep(120);
+  s = await snap();
+  check(s && s.loopMode === false, 'L again → LOOP MODE OFF');
 
   ws.close();
   console.log('\n' + (ok ? 'RESULT OK' : 'RESULT FAIL'));
