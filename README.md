@@ -198,7 +198,28 @@ firmware/src/
 
 ---
 
-## 9. 已知限制（v0.1 诚实列表）
+## 9. 主机侧测试
+
+循环引擎是纯 C++（`loop.cpp` 不依赖 USB/音频/SD），可以在 PC 上跑：
+
+```bash
+cd firmware
+g++ -std=c++17 -I test/host -I src test/host/test_loop.cpp src/loop.cpp -o test_loop
+./test_loop
+# 期望：RESULT OK
+```
+
+没有 g++ 时可以用 Zig 自带的 C++ 前端：
+
+```bash
+python -m ziglang c++ -std=c++17 -I test/host -I src ^
+  test/host/test_loop.cpp src/loop.cpp -o test_loop.exe
+test_loop.exe
+```
+
+覆盖：小节/BPM clamp、首录、自动停、叠录相位、通道过滤、lane 映射、停止/清空、ARMED 超时。`test/host/Arduino.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现），**不测试** USB、ES8311、SD 和真机时序。
+
+## 10. 已知限制（v0.1 诚实列表）
 
 1. **没有真机验收**：USB 枚举、全双工、ES8311 click、SD 长时读写都只过了编译；第一次上机按第 6 节逐项确认。
 2. **USB Host 是实验路径**：FM-1 是 USB MIDI + Audio 复合设备，描述符 >256 B 可能枚举失败；host build 没有 USB-CDC 串口。
@@ -213,12 +234,12 @@ firmware/src/
 
 ---
 
-## 10. 设计文档
+## 11. 设计文档
 
 - **[设计评估](docs/设计评估.md)**：可行性、4 个必须先定的语义、容量测算、风险与里程碑。
 - **UI 规格**：版式常量见 `web/app.js` 与 `firmware/src/ui.cpp`（两边一一对应）。
 - **发布说明**：本 README 即 v0.1 说明。
 
-## 11. 许可
+## 12. 许可
 
 MIT（见 `LICENSE`）。字体 Silkscreen 为 SIL OFL 1.1；配色 Gruvbox（MIT）；硬件库 M5Unified / M5GFX / M5Cardputer（MIT）。

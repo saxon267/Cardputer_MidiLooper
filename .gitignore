@@ -1,3 +1,8 @@
 .pio/
 .vscode/
 *.log
+*.exe
+*.o
+*.obj
+
+*.pdb
