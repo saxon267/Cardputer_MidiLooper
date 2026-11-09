@@ -46,7 +46,7 @@ bool LoopStore::save(const LoopEvent* ev, int n, uint16_t bpmX10, uint16_t bars,
     const char* name = "MIDI LOOPER";
     const uint8_t nameLen = (uint8_t)strlen(name);
 
-    uint32_t trackLen = 8 + 7 + (4 + nameLen) + 4;  // time sig + tempo + name + EOT
+    uint32_t trackLen = 8 + 7 + (4 + nameLen);  // time sig + tempo + track name
     uint32_t prev = 0;
     for (int i = 0; i < n; ++i) {
         if (ev[i].type < LE_NOTE_ON || ev[i].type > LE_PB) continue;

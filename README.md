@@ -217,13 +217,14 @@ firmware/src/
 
 ## 9. 主机侧测试
 
-循环引擎是纯 C++（`loop.cpp` 不依赖 USB/音频/SD），可以在 PC 上跑：
+循环引擎和 SMF writer 都可以在 PC 上跑：
 
 ```bash
 cd firmware
 g++ -std=c++17 -I test/host -I src test/host/test_loop.cpp src/loop.cpp -o test_loop
-./test_loop
-# 期望：RESULT OK
+./test_loop          # 期望：RESULT OK
+g++ -std=c++17 -I test/host -I src test/host/test_store.cpp src/loop_store.cpp -o test_store
+./test_store         # 期望：RESULT OK
 ```
 
 没有 g++ 时可以用 Zig 自带的 C++ 前端：
@@ -234,7 +235,12 @@ python -m ziglang c++ -std=c++17 -I test/host -I src ^
 test_loop.exe
 ```
 
-覆盖：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤/lane 映射、early stop、8192 容量、停止/清空、ARMED 超时、拍点。`test/host/Arduino.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现），**不测试** USB、ES8311、SD 和真机时序；同一组场景的 Web 版本见第 3.1 节。
+覆盖：
+
+- **loop engine**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤/lane 映射、early stop、8192 容量、停止/清空、ARMED 超时、拍点。
+- **SMF writer**（`test_store.cpp` + fake `SD.h`）：MThd/MTrk、division 480、time signature 4/4、tempo、track name、事件 delta、EOT、`MTrk` 长度字段。**这个测试实际抓到并修掉了一个 track length 多 4 字节的 bug。**
+
+`test/host/Arduino.h` 和 `test/host/SD.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现、内存 SD），**不测试** USB、ES8311 和真机时序；同一组场景的 Web 版本见第 3.1 节。
 
 ## 10. 已知限制（v0.1 诚实列表）
 

@@ -6,7 +6,7 @@
 
 - **Web 模型**：`web/test.html` / `node web/test/run-node.js`，11/11 `ALL PASS`。
 - **交互 smoke**：`pwsh tools/web-smoke.ps1`（headless Edge + CDP），18/18 通过。
-- **C++ host**：`firmware/test/host/test_loop.cpp`，11/11 `RESULT OK`。
+- **C++ host**：`firmware/test/host/test_loop.cpp` 11/11 `RESULT OK`；`test_store.cpp`（SMF writer + fake SD）验证 header/track length/EOT，并修掉了 `MTrk` 长度多 4 字节的 bug。
 
 ## 内容
 
