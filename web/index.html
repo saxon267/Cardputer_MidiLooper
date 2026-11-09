@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MIDI Looper — Cardputer-Adv UI Preview</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <header class="top">
+    <div class="brand">
+      <span class="dot"></span>
+      <h1>MIDI<span>_</span>LOOPER</h1>
+      <em>v0.1 · UI PREVIEW</em>
+    </div>
+    <div class="top-note">Cardputer-Adv · 240×135 · Gruvbox Dark · USB Host → FM-1</div>
+  </header>
+
+  <main class="main">
+    <section class="device">
+      <div class="bezel">
+        <div class="screen">
+          <canvas id="lcd" width="240" height="135"></canvas>
+          <div class="gloss"></div>
+        </div>
+        <div class="device-foot">
+          <span>M5STACK CARDPUTER-ADV</span>
+          <span class="led" id="led"></span>
+          <span>ESP32-S3 · 512K · µSD</span>
+        </div>
+      </div>
+      <p class="hint">Click the screen or use the keyboard. <b>Tab</b> switches LOOP / FILE.</p>
+    </section>
+
+    <aside class="panel">
+      <div class="block">
+        <label class="lbl">TRANSPORT</label>
+        <div class="row">
+          <button id="btnRec" class="btn rec">● REC</button>
+          <button id="btnPlay" class="btn play">▶ PLAY</button>
+          <button id="btnStop" class="btn">■ STOP</button>
+        </div>
+        <div class="row spread">
+          <span>STATE</span><output id="stateOut">STOP</output>
+        </div>
+        <div class="row spread">
+          <span>BAR</span><output id="barOut">1 / 4</output>
+        </div>
+      </div>
+
+      <div class="block">
+        <label class="lbl">LOOP</label>
+        <div class="row spread">
+          <span>BPM</span><output id="bpmOut">120</output>
+        </div>
+        <input id="bpm" type="range" min="40" max="240" value="120">
+        <div class="row spread">
+          <span>BARS</span><output id="barsOut">4</output>
+        </div>
+        <div class="bars" id="barBtns">
+          <button data-bars="1">1</button><button data-bars="2">2</button>
+          <button data-bars="4" class="on">4</button><button data-bars="8">8</button>
+          <button data-bars="16">16</button><button data-bars="32">32</button>
+        </div>
+        <div class="row spread">
+          <span>CLICK</span>
+          <button id="btnClick" class="toggle on">ON</button>
+        </div>
+        <div class="row spread">
+          <span>COUNT-IN</span><output id="countOut">1 BAR</output>
+        </div>
+      </div>
+
+      <div class="block">
+        <label class="lbl">PAGES</label>
+        <div class="row">
+          <button id="btnLoop" class="btn on">LOOP</button>
+          <button id="btnFile" class="btn">FILE</button>
+          <button id="btnSettings" class="btn">SETTINGS</button>
+        </div>
+      </div>
+
+      <div class="block keys">
+        <label class="lbl">KEYS</label>
+        <p><b>R</b> record / stop &nbsp; <b>Enter</b> play / stop</p>
+        <p><b>S</b> save &nbsp; <b>M</b> metronome &nbsp; <b>1–4</b> lane</p>
+        <p><b>← →</b> BPM &nbsp; <b>↑ ↓</b> bars &nbsp; <b>Esc</b> close</p>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script src="font8.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

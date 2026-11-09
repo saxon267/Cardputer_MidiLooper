@@ -1,0 +1,242 @@
+:root {
+  --bg: #111312;
+  --panel: #1d2021;
+  --bar: #282828;
+  --edge: #3c3836;
+  --txt: #ebdbb2;
+  --dim: #a89984;
+  --faint: #7c6f64;
+  --acc: #fe8019;
+  --amb: #fabd2f;
+  --aqua: #8ec07c;
+  --red: #fb4934;
+  --green: #b8bb26;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+  background:
+    radial-gradient(1100px 600px at 50% -10%, #2a2b26 0%, transparent 60%),
+    var(--bg);
+  color: var(--txt);
+  font-family: "DM Mono", "Cascadia Mono", "Consolas", monospace;
+}
+
+.wrap {
+  max-width: 1220px;
+  margin: 0 auto;
+  padding: 28px 24px 40px;
+}
+
+.top {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--edge);
+}
+
+.brand { display: flex; align-items: baseline; gap: 10px; }
+.brand .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--acc);
+  box-shadow: 0 0 12px rgba(254,128,25,.8);
+}
+.brand h1 {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: .18em;
+  font-weight: 600;
+}
+.brand h1 span { color: var(--acc); }
+.brand em {
+  font-style: normal;
+  font-size: 10px;
+  letter-spacing: .16em;
+  color: var(--faint);
+}
+.top-note { font-size: 11px; color: var(--faint); letter-spacing: .05em; }
+
+.main {
+  display: grid;
+  grid-template-columns: 770px 300px;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 28px;
+  align-items: start;
+}
+
+.device { min-width: 0; }
+
+.bezel {
+  background: linear-gradient(#2a2b26, #1b1d1a);
+  border: 1px solid #3f4038;
+  border-radius: 18px;
+  padding: 18px 18px 10px;
+  box-shadow: 0 24px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+}
+
+.screen {
+  position: relative;
+  width: 734px;
+  background: #0b0c0b;
+  border: 1px solid #000;
+  border-radius: 6px;
+  padding: 6px;
+  overflow: hidden;
+}
+
+#lcd {
+  display: block;
+  width: 720px;
+  height: 405px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 3px;
+  background: #1d2021;
+}
+
+.gloss {
+  pointer-events: none;
+  position: absolute;
+  inset: 6px;
+  border-radius: 3px;
+  background: linear-gradient(115deg, rgba(255,255,255,.045) 0%, transparent 38%, transparent 100%);
+}
+
+.device-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 6px 0;
+  font-size: 9px;
+  letter-spacing: .14em;
+  color: var(--faint);
+}
+.device-foot .led {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 8px rgba(184,187,38,.8);
+}
+
+.hint { margin: 12px 6px 0; font-size: 11px; color: var(--faint); }
+.hint b { color: var(--dim); font-weight: 500; }
+
+.panel { display: flex; flex-direction: column; gap: 14px; }
+
+.block {
+  background: rgba(40,40,40,.55);
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  padding: 12px 12px 14px;
+}
+
+.lbl {
+  display: block;
+  font-size: 9px;
+  letter-spacing: .22em;
+  color: var(--faint);
+  margin-bottom: 10px;
+}
+
+.row { display: flex; gap: 8px; align-items: center; }
+.row + .row { margin-top: 8px; }
+.row.spread { justify-content: space-between; }
+.row.spread span { font-size: 10px; letter-spacing: .12em; color: var(--dim); }
+.row.spread output { font-size: 12px; color: var(--txt); }
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--edge);
+  background: #202320;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: .08em;
+  padding: 7px 9px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: .12s ease;
+}
+.btn:hover { border-color: var(--faint); color: var(--txt); }
+.btn.on { background: var(--acc); border-color: var(--acc); color: #1d2021; }
+.btn.rec { color: var(--red); }
+.btn.rec.on { background: var(--red); border-color: var(--red); color: #1d2021; }
+.btn.play { color: var(--green); }
+.btn.play.on { background: var(--green); border-color: var(--green); color: #1d2021; }
+
+input[type="range"] {
+  width: 100%;
+  appearance: none;
+  height: 4px;
+  background: var(--edge);
+  border-radius: 2px;
+  outline: none;
+  margin: 10px 0 2px;
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 12px; height: 12px; border-radius: 2px;
+  background: var(--acc);
+  cursor: pointer;
+}
+
+.bars { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; margin-top: 8px; }
+.bars button {
+  appearance: none;
+  border: 1px solid var(--edge);
+  background: #202320;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10px;
+  padding: 5px 0;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.bars button.on { background: var(--amb); border-color: var(--amb); color: #1d2021; }
+
+.toggle {
+  appearance: none;
+  border: 1px solid var(--edge);
+  background: #202320;
+  color: var(--faint);
+  font: inherit;
+  font-size: 10px;
+  letter-spacing: .1em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.toggle.on { border-color: var(--aqua); color: var(--aqua); }
+
+.keys p { margin: 6px 0 0; font-size: 10px; color: var(--faint); line-height: 1.7; }
+.keys b { color: var(--dim); font-weight: 500; }
+
+/* capture mode: only the LCD, for screenshots */
+body.capture .wrap { padding: 0; max-width: none; }
+body.capture .top, body.capture .panel, body.capture .hint, body.capture .device-foot { display: none; }
+body.capture .main { display: block; margin: 0; }
+body.capture .bezel {
+  border: 0; border-radius: 0; padding: 16px;
+  background: #141615;
+  box-shadow: none;
+}
+body.capture .screen { width: 972px; margin: 0 auto; padding: 6px; border: 0; border-radius: 0; }
+body.capture #lcd { width: 960px; height: 540px; border-radius: 0; }
+body.capture .gloss { display: none; }
+
+@media (max-width: 1160px) {
+  .main { grid-template-columns: 1fr; justify-content: stretch; }
+  .panel { display: grid; grid-template-columns: 1fr 1fr; }
+  .screen, #lcd { width: 100%; height: auto; }
+  #lcd { aspect-ratio: 240 / 135; }
+}
+@media (max-width: 640px) {
+  .panel { grid-template-columns: 1fr; }
+  .top { flex-direction: column; align-items: flex-start; gap: 6px; }
+  .wrap { padding: 18px 14px 28px; }
+}
