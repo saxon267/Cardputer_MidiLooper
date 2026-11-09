@@ -8,6 +8,7 @@
 | `Enter` | 播放 / 停止 |
 | `S` | 保存 `/MidiLoop/LOOP_xxxx.MID` |
 | `C` | 清空循环 |
+| `U` | 撤销最后一次叠录（叠录中 = 取消当前 take） |
 | `M` | 节拍器开 / 关 |
 | `G` | 设置浮层 |
 | `Tab` | LOOP ↔ FILE |
@@ -37,15 +38,18 @@
 
 | 键 | 动作 |
 |---|---|
-| `;` / `.` | 选行（BPM / BARS / CLICK / COUNT-IN） |
-| `,` / `/` | 改值 |
-| `Enter` | 开关当前项；BPM/BARS 行关闭 |
+| `;` / `.` | 选行（BPM / BARS / QUANT / SWING / CLICK / COUNT-IN） |
+| `,` / `/` | 改值（QUANT 切换网格，SWING ±5） |
+| `Enter` | 开关 CLICK/COUNT-IN；BPM/BARS/QUANT/SWING 行关闭 |
 | `Bksp` / `G` / `Tab` | 关闭 |
 
 ## 状态
 
 `STOP` → 按 R → `ARMED`（count-in 4 拍）→ 首个 MIDI → `REC` → 录满/再按 R → `PLAY`。
 `PLAY` 按 R → `OVERDUB`（立即按当前相位）→ 再按 R/循环末尾 → `PLAY`。
+`U` → 撤销最后一次叠录；`C` → 清空全部。
+
+Quantize 默认 1/16（120 ticks），SWING 默认 50；两者都在设置浮层里改。
 
 ## Sloop 设置（必须）
 

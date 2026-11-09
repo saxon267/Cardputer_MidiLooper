@@ -21,6 +21,8 @@
     bpm: 120,
     click: true,
     countIn: 1,
+    quantize: 3,          // OFF=0, 1/4=1, 1/8=2, 1/16=3, 1/32=4
+    swing: 50,
     bar: 1,
     phase: 0,
     selectedLane: 0,
@@ -96,6 +98,8 @@
   const engine = new LoopEngine();
   engine.setBars(state.bars);
   engine.setBpm(state.bpm * 10);
+  engine.setQuantize(state.quantize);
+  engine.setSwing(state.swing);
 
   let demoAt = 0;
   let demoNext = 0;
@@ -323,7 +327,7 @@
     else if (state.loop === 'PLAY') hint = 'R OVERDUB   ENT STOP   S SAVE';
     else hint = 'R REC   ENT PLAY   S SAVE';
     text(6, 125, hint, C.faint);
-    textR(234, 125, 'TAB FILE', C.faint);
+    textR(234, 125, engine.hasLoop() ? 'U UNDO' : 'TAB FILE', C.faint);
   }
 
   // ------------------------------------------------------------ FILE page
@@ -365,14 +369,17 @@
     fill(29, 17, 182, 102, C.panel);
     textC(120, 21, 'SETTINGS', C.amb, true);
 
+    const qnames = ['OFF', '1/4', '1/8', '1/16', '1/32'];
     const rows = [
       ['BPM', String(state.bpm)],
       ['BARS', String(state.bars)],
+      ['QUANT', qnames[state.quantize] || '1/16'],
+      ['SWING', String(state.swing)],
       ['CLICK', state.click ? 'ON' : 'OFF'],
       ['COUNT-IN', state.countIn + ' BAR'],
     ];
     for (let i = 0; i < rows.length; ++i) {
-      const y = 38 + i * 14;
+      const y = 32 + i * 12;
       if (i === state.settingsRow) {
         fill(32, y - 2, 176, 12, C.pad);
         fill(32, y - 2, 2, 12, C.amb);
@@ -381,7 +388,7 @@
       textR(176, y, rows[i][1], C.txt, true);
       text(184, y, '< >', C.faint);
     }
-    textC(120, 106, 'UP/DN   <-/->   ESC', C.faint);
+    textC(120, 108, 'UP/DN   <-/->   ESC', C.faint);
   }
 
   function drawToast() {
@@ -542,6 +549,19 @@
     return true;
   }
 
+  function changeQuantize(delta) {
+    state.quantize = (state.quantize + delta + 5) % 5;
+    engine.setQuantize(state.quantize);
+    const names = ['OFF', '1/4', '1/8', '1/16', '1/32'];
+    toast('QUANT ' + names[state.quantize]);
+  }
+
+  function changeSwing(delta) {
+    state.swing = Math.max(50, Math.min(75, state.swing + delta * 5));
+    engine.setSwing(state.swing);
+    toast('SWING ' + state.swing);
+  }
+
   function adjust(delta) {
     if (state.settings) {
       if (state.settingsRow === 0) {
@@ -551,6 +571,10 @@
         const i = opts.indexOf(state.bars);
         changeBars(opts[Math.max(0, Math.min(opts.length - 1, i + delta))]);
       } else if (state.settingsRow === 2) {
+        changeQuantize(delta);
+      } else if (state.settingsRow === 3) {
+        changeSwing(delta);
+      } else if (state.settingsRow === 4) {
         state.click = !state.click;
       } else {
         state.countIn = state.countIn ? 0 : 1;
@@ -576,16 +600,25 @@
     }
     if (k === 'g' || k === 'G') { state.settings = !state.settings; return; }
     if (k === 'm' || k === 'M') { state.click = !state.click; toast(state.click ? 'CLICK ON' : 'CLICK OFF'); return; }
+    if (k === 'u' || k === 'U') {
+      const now = performance.now();
+      engine.nowMs = now;
+      flushDemoNotes(now);
+      const ok = engine.undo();
+      syncFromEngine();
+      toast(ok ? 'UNDO' : 'NOTHING TO UNDO');
+      return;
+    }
     if (k >= '1' && k <= '4') { state.selectedLane = Number(k) - 1; return; }
     if (k === 'ArrowUp') {
       e.preventDefault();
-      if (state.settings) state.settingsRow = (state.settingsRow + 3) % 4;
+      if (state.settings) state.settingsRow = (state.settingsRow + 5) % 6;
       else changeBars(state.bars * 2);
       return;
     }
     if (k === 'ArrowDown') {
       e.preventDefault();
-      if (state.settings) state.settingsRow = (state.settingsRow + 1) % 4;
+      if (state.settings) state.settingsRow = (state.settingsRow + 1) % 6;
       else changeBars(state.bars / 2);
       return;
     }
@@ -632,6 +665,8 @@
       save,
       changeBars,
       changeBpm,
+      changeQuantize,
+      changeSwing,
       syncFromEngine,
     };
   }

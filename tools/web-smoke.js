@@ -126,6 +126,12 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   check(s && s.state === 'PLAY', 'R again → PLAY');
   check(s && s.count > base, 'overdub merged events', s ? base + '→' + s.count : '');
 
+  // Undo removes the last take and keeps the base loop.
+  await evaluate(key('u'));
+  await sleep(250);
+  s = await snap();
+  check(s && s.state === 'PLAY' && s.count === base, 'U → undo last take');
+
   // Save stops and adds a file entry.
   const filesBefore = s ? s.files : 0;
   await evaluate(key('s'));

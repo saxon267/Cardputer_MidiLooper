@@ -248,7 +248,7 @@ void UI::drawLoop()
     else if (app.loopState == LoopState::PLAY)  hint = "R OVERDUB   ENT STOP   S SAVE";
     else                                        hint = "R REC   ENT PLAY   S SAVE";
     text(6, BOT_Y + 1, hint, C_FAINT);
-    if (!app.settings) textR(234, BOT_Y + 1, "TAB FILE", C_FAINT);
+    if (!app.settings) textR(234, BOT_Y + 1, app.hasLoop ? "U UNDO" : "TAB FILE", C_FAINT);
 }
 
 // ---------------------------------------------------------------- FILES
@@ -305,15 +305,19 @@ void UI::drawSettings()
     rect(29, 17, 182, 102, C_PANEL);
     textC(SCR_W / 2, 21, "SETTINGS", C_AMB, true);
 
-    const char* labels[4] = {"BPM", "BARS", "CLICK", "COUNT-IN"};
-    char values[4][12];
+    const char* labels[6] = {"BPM", "BARS", "QUANT", "SWING", "CLICK", "COUNT-IN"};
+    static const char* qnames[5] = {"OFF", "1/4", "1/8", "1/16", "1/32"};
+    char values[6][12];
     snprintf(values[0], sizeof(values[0]), "%u", app.bpmX10 / 10);
     snprintf(values[1], sizeof(values[1]), "%u", app.bars);
-    snprintf(values[2], sizeof(values[2]), "%s", app.click ? "ON" : "OFF");
-    snprintf(values[3], sizeof(values[3]), "%s", app.countIn ? "1 BAR" : "OFF");
+    snprintf(values[2], sizeof(values[2]), "%s",
+             qnames[app.quantize <= Q_1_32 ? app.quantize : Q_1_16]);
+    snprintf(values[3], sizeof(values[3]), "%u", app.swing);
+    snprintf(values[4], sizeof(values[4]), "%s", app.click ? "ON" : "OFF");
+    snprintf(values[5], sizeof(values[5]), "%s", app.countIn ? "1 BAR" : "OFF");
 
-    for (int i = 0; i < 4; ++i) {
-        const int y = 38 + i * 14;
+    for (int i = 0; i < 6; ++i) {
+        const int y = 32 + i * 12;
         if (i == app.settingsRow) {
             rect(32, y - 2, 176, 12, C_PAD);
             rect(32, y - 2, 2, 12, C_AMB);
@@ -322,7 +326,7 @@ void UI::drawSettings()
         textR(176, y, values[i], C_TXT, true);
         text(184, y, "< >", C_FAINT);
     }
-    textC(SCR_W / 2, 106, "UP/DN  LEFT/RIGHT  ESC", C_FAINT);
+    textC(SCR_W / 2, 108, "UP/DN  LEFT/RIGHT  ESC", C_FAINT);
 }
 
 void UI::drawDelete()

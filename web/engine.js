@@ -15,6 +15,9 @@
 
   const State = { STOP: 'STOP', ARMED: 'ARMED', REC: 'REC', PLAY: 'PLAY' };
   const Type  = { NOTE_ON: 1, NOTE_OFF: 2, CC64: 3, CC1: 4, PB: 5 };
+  const Quant = { OFF: 0, Q4: 1, Q8: 2, Q16: 3, Q32: 4 };
+  const typeOf = e => e.type & 0x0F;
+  const genOf  = e => e.type >> 4;
 
   const laneOfChannel = ch => (ch === 0 ? 0 : ch === 1 ? 1 : ch === 2 ? 2 : ch === 9 ? 3 : -1);
   const channelAllowed = ch => laneOfChannel(ch) >= 0;
@@ -44,6 +47,10 @@
       this.nowMs = 0;
       this.lastFlags = 0;
       this.onEvent = null;
+      this.quantize = Quant.Q16;
+      this.swing = 50;
+      this.gen = 1;
+      this.undoStack = [];      // { gen, count }
     }
 
     loopLenTicks() { return this.bars * BEATS * PPQN; }
@@ -68,6 +75,68 @@
       this.bpmX10 = Math.max(400, Math.min(4000, bpmX10 | 0));
     }
 
+    setQuantize(q) {
+      this.quantize = (q >= 0 && q <= Quant.Q32) ? (q | 0) : Quant.Q16;
+    }
+
+    gridTicks() {
+      switch (this.quantize) {
+        case Quant.Q4:  return PPQN;
+        case Quant.Q8:  return PPQN / 2;
+        case Quant.Q16: return PPQN / 4;
+        case Quant.Q32: return PPQN / 8;
+        default:        return 0;
+      }
+    }
+
+    setSwing(pct) {
+      this.swing = Math.max(50, Math.min(75, pct | 0));
+    }
+
+    swingOffsetTicks(tick) {
+      if (this.swing <= 50) return 0;
+      const eighth = PPQN / 2;
+      if (tick % eighth !== 0) return 0;         // exact 8th-note positions
+      if (((tick / eighth) & 1) === 0) return 0; // downbeat stays straight
+      return Math.floor((this.swing - 50) * eighth / 50);
+    }
+
+    snapTick(tick) {
+      const g = this.gridTicks();
+      if (!g) return tick;
+      let snapped = Math.floor((tick + g / 2) / g) * g;
+      const len = this.loopLenTicks();
+      if (snapped >= len) snapped = len > g ? len - g : 0;
+      return snapped;
+    }
+
+    pushUndo(gen, count) {
+      this.undoStack.push({ gen, count });
+      if (this.undoStack.length > 8) this.undoStack.shift();
+    }
+
+    undo() {
+      if (this.state === State.REC && this.overdub) {
+        this.take = [];
+        this.state = State.PLAY;
+        this.overdub = false;
+        this.autoStop = false;
+        if (this.undoStack.length) this.undoStack.pop();
+        return true;
+      }
+      if (!this.undoStack.length) return false;
+
+      const u = this.undoStack.pop();
+      const prev = this.state;
+      this.active = this.active.filter(e => genOf(e) !== u.gen);
+      this.idx = this.lowerBound(this.active, this.phaseTick);
+      this.state = (this.active.length > 0 && prev === State.PLAY) ? State.PLAY : State.STOP;
+      this.overdub = false;
+      this.take = [];
+      this.autoStop = false;
+      return true;
+    }
+
     startFirst() {
       if (this.state === State.REC || this.state === State.ARMED) return false;
       this.state = State.ARMED;
@@ -83,12 +152,24 @@
       this.overflow = false;
       this.startPulse = false;
       this.armMs = this.nowMs;
+      this.gen = 1;
+      this.undoStack = [];
       return true;
     }
 
     startOverdub() {
       if (!this.hasLoop()) return this.startFirst();
       if (this.state === State.REC || this.state === State.ARMED) return false;
+
+      if (this.gen >= 15) {
+        for (const e of this.active) e.type &= 0x0F;
+        this.gen = 1;
+        this.undoStack = [];
+      } else {
+        ++this.gen;
+      }
+      this.pushUndo(this.gen, this.active.length);
+
       if (this.state !== State.PLAY) {
         this.phaseQ16 = 0;
         this.phaseTick = 0;
@@ -178,20 +259,22 @@
       if (!channelAllowed(ch)) return;
 
       const e = { tick: 0, type: 0, d1: 0, d2: 0, ch };
+      let type = 0;
       if (hi === 0x90) {
-        if (d2 === 0) { e.type = Type.NOTE_OFF; e.d1 = d1; }
-        else          { e.type = Type.NOTE_ON;  e.d1 = d1; e.d2 = d2; }
+        if (d2 === 0) { type = Type.NOTE_OFF; e.d1 = d1; }
+        else          { type = Type.NOTE_ON;  e.d1 = d1; e.d2 = d2; }
       } else if (hi === 0x80) {
-        e.type = Type.NOTE_OFF; e.d1 = d1;
+        type = Type.NOTE_OFF; e.d1 = d1;
       } else if (hi === 0xB0 && d1 === 64) {
-        e.type = Type.CC64; e.d1 = 64; e.d2 = d2;
+        type = Type.CC64; e.d1 = 64; e.d2 = d2;
       } else if (hi === 0xB0 && d1 === 1) {
-        e.type = Type.CC1; e.d1 = 1; e.d2 = d2;
+        type = Type.CC1; e.d1 = 1; e.d2 = d2;
       } else if (hi === 0xE0) {
-        e.type = Type.PB; e.d1 = d1; e.d2 = d2;
+        type = Type.PB; e.d1 = d1; e.d2 = d2;
       } else {
         return;
       }
+      e.type = ((this.gen << 4) | type) & 0xFF;
 
       if (this.state === State.ARMED) {
         this.state = State.REC;
@@ -206,18 +289,19 @@
         this.takeFull = false;
         this.overflow = false;
         this.startPulse = true;
+        e.tick = 0;
         this.inactive.push(e);          // tick 0
       } else if (this.state === State.REC) {
         if (this.overdub) {
           const len = this.loopLenTicks();
-          e.tick = len ? (this.phaseTick % len) : 0;
+          e.tick = this.snapTick(len ? (this.phaseTick % len) : 0);
           this.appendTake(e);
         } else {
           const t = Math.floor((nowUs - this.originUs) * this.bpmX10 * 8 / 10000000);
           if (t >= this.loopLenTicks()) {
             this.autoStop = true;
           } else if (this.inactive.length < MAX_EVENTS) {
-            e.tick = t;
+            e.tick = this.snapTick(t);
             this.inactive.push(e);
           } else {
             this.overflow = true;
@@ -247,8 +331,13 @@
       const prevTick = this.phaseTick;
 
       if (q >= lenQ) {
-        q %= lenQ;
+        // Flush any tail still held back by swing before wrapping.
+        while (this.idx < this.active.length) {
+          if (this.onEvent) this.onEvent(this.active[this.idx]);
+          ++this.idx;
+        }
         this.idx = 0;
+        q %= lenQ;
         if (this.state === State.REC) this.autoStop = true;
       }
       this.phaseQ16 = q;
@@ -262,8 +351,12 @@
         if (beat % BEATS === 0) flags |= 0x02;
       }
 
-      while (this.idx < this.active.length && this.active[this.idx].tick <= tick) {
-        if (this.onEvent) this.onEvent(this.active[this.idx]);
+      while (this.idx < this.active.length) {
+        const e = this.active[this.idx];
+        let due = e.tick + this.swingOffsetTicks(e.tick);
+        if (due >= len) due = len - 1;
+        if (due > tick) break;
+        if (this.onEvent) this.onEvent(e);
         ++this.idx;
       }
       this.lastFlags = flags;
@@ -274,7 +367,7 @@
       const out = [0, 0, 0, 0];
       const arr = (this.state === State.REC && !this.overdub) ? this.inactive : this.active;
       for (const e of arr) {
-        if (e.type !== Type.NOTE_ON) continue;
+        if (typeOf(e) !== Type.NOTE_ON) continue;
         const l = laneOfChannel(e.ch);
         if (l >= 0) ++out[l];
       }
@@ -344,7 +437,7 @@
     }
   }
 
-  return { LoopEngine, LoopState: State, LoopEventType: Type,
+  return { LoopEngine, LoopState: State, LoopEventType: Type, QuantizeGrid: Quant,
            MAX_EVENTS, MAX_TAKE, PPQN, BEATS, AUDIO_RATE,
-           laneOfChannel, channelAllowed };
+           typeOf, genOf, laneOfChannel, channelAllowed };
 });

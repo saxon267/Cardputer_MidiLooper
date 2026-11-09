@@ -126,6 +126,7 @@ static void testOverdubMergesAtCurrentPhase()
 {
     LoopEngine e;
     resetEngine(e, 1, 1200);
+    e.setQuantize(Q_OFF);           // exact phase for this test
 
     // Take 1: two notes on CH1.
     CHECK(e.startFirst());
@@ -161,7 +162,7 @@ static void testOverdubMergesAtCurrentPhase()
     const LoopEvent* ev = e.events();
     uint32_t best = 0xFFFFFFFFu;
     for (int i = 0; i < e.count(); ++i) {
-        if (ev[i].ch == 1 && ev[i].type == LE_NOTE_ON) best = ev[i].tick;
+        if (ev[i].ch == 1 && LoopEngine::typeOf(ev[i]) == LE_NOTE_ON) best = ev[i].tick;
     }
     CHECK(best != 0xFFFFFFFFu);
     CHECK(best >= phase - 2 && best <= phase + 2);
@@ -306,6 +307,124 @@ static void testBeatFlags()
     CHECK(accent == 0);
 }
 
+static void testQuantize()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+    e.setQuantize(Q_1_16);
+    CHECK(e.quantize() == Q_1_16);
+    CHECK(e.gridTicks() == 120);
+
+    CHECK(e.startFirst());
+    g_test_us = 0;
+    noteOn(e, 0, 60, 100);              // tick 0
+    g_test_us = 104200;                 // t = 100 ticks -> snapped 120
+    noteOn(e, 0, 62, 100);
+    e.stopRecord();
+    CHECK(e.count() == 2);
+    CHECK(e.events()[1].tick == 120);
+
+    // Q_OFF leaves the raw tick.
+    resetEngine(e, 1, 1200);
+    e.setQuantize(Q_OFF);
+    CHECK(e.startFirst());
+    g_test_us = 0;
+    noteOn(e, 0, 60, 100);
+    g_test_us = 104200;
+    noteOn(e, 0, 62, 100);
+    e.stopRecord();
+    CHECK(e.events()[1].tick == 100);
+}
+
+static LoopEngine* g_swingEngine = nullptr;
+struct SwingHit { uint32_t ev; uint32_t at; };
+static SwingHit g_hits[8] = {};
+static int g_hitCount = 0;
+
+static void swingSink(const LoopEvent& e)
+{
+    if (g_hitCount < 8) {
+        g_hits[g_hitCount].ev = e.tick;
+        g_hits[g_hitCount].at = g_swingEngine->positionTicks();
+        ++g_hitCount;
+    }
+}
+
+static void testSwing()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+    e.setQuantize(Q_OFF);
+    e.setSwing(66);
+
+    CHECK(e.swingOffsetTicks(240) == 76);   // (66-50)*240/50
+    CHECK(e.swingOffsetTicks(480) == 0);
+    CHECK(e.swingOffsetTicks(120) == 0);
+
+    CHECK(e.startFirst());
+    g_test_us = 0;
+    noteOn(e, 0, 60, 100);              // tick 0
+    g_test_us = 250000;
+    noteOn(e, 0, 62, 100);              // tick 240 (odd 8th)
+    g_test_us = 500000;
+    noteOn(e, 0, 64, 100);              // tick 480 (downbeat)
+    e.stopRecord();
+    CHECK(e.count() == 3);
+
+    g_hitCount = 0;
+    g_swingEngine = &e;
+    e.setSink(swingSink);
+    e.play();
+    for (int i = 0; i < 400; ++i) block(e, 1);
+
+    CHECK(g_hitCount == 3);
+    CHECK(g_hits[0].ev == 0);
+    CHECK(g_hits[1].ev == 240);
+    CHECK(g_hits[1].at >= 315 && g_hits[1].at <= 320);  // delayed by ~76
+    CHECK(g_hits[2].ev == 480);
+    CHECK(g_hits[2].at >= 480 && g_hits[2].at <= 482);  // downbeat stays
+    e.setSink(nullptr);
+}
+
+static void testUndo()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+    e.setQuantize(Q_OFF);
+
+    // Base: tick 0 and tick 480.
+    CHECK(e.startFirst());
+    g_test_us = 0;
+    noteOn(e, 0, 60, 100);
+    g_test_us = 500000;
+    noteOn(e, 0, 62, 100);
+    e.stopRecord();
+    CHECK(e.count() == 2);
+
+    // Overdub two events that would interleave with the base if sorted.
+    CHECK(e.startOverdub());
+    block(e, 140);
+    noteOn(e, 1, 67, 100);              // ~tick 195
+    block(e, 70);
+    noteOn(e, 1, 69, 100);              // ~tick 292
+    e.stopRecord();
+    CHECK(e.count() == 4);
+
+    CHECK(e.undo());
+    CHECK(e.count() == 2);
+    CHECK(e.events()[0].tick == 0);
+    CHECK(e.events()[1].tick == 480);   // base survives, not the first 2 sorted
+    CHECK(!e.undo());
+
+    // U during an active overdub cancels the take.
+    CHECK(e.startOverdub());
+    block(e, 50);
+    noteOn(e, 2, 72, 100);
+    CHECK(e.undo());
+    CHECK(e.state() == LoopState::PLAY);
+    CHECK(e.count() == 2);
+}
+
 static void testArmTimeout()
 {
     LoopEngine e;
@@ -329,6 +448,9 @@ int main()
     testOverdubFromStop();
     testCapacity();
     testBeatFlags();
+    testQuantize();
+    testSwing();
+    testUndo();
     testClearAndStop();
     testArmTimeout();
 

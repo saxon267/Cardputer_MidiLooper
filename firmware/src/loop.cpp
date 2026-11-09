@@ -18,6 +18,103 @@ void LoopEngine::begin()
     _startPulse = false;
     _originUs = _armMs = 0;
     _beatFlags = 0;
+    _quantize = Q_1_16;
+    _swing = 50;
+    _gen = 1;
+    _undoTop = 0;
+}
+
+void LoopEngine::setQuantize(uint8_t q)
+{
+    _quantize = (q <= Q_1_32) ? q : Q_1_16;
+}
+
+uint32_t LoopEngine::gridTicks() const
+{
+    switch (_quantize) {
+        case Q_1_4:  return LOOP_PPQN;          // 480
+        case Q_1_8:  return LOOP_PPQN / 2;      // 240
+        case Q_1_16: return LOOP_PPQN / 4;      // 120
+        case Q_1_32: return LOOP_PPQN / 8;      // 60
+        default:     return 0;
+    }
+}
+
+void LoopEngine::setSwing(uint8_t pct)
+{
+    if (pct < 50) pct = 50;
+    if (pct > 75) pct = 75;
+    _swing = pct;
+}
+
+uint32_t LoopEngine::swingOffsetTicks(uint32_t tick) const
+{
+    if (_swing <= 50) return 0;
+    const uint32_t eighth = LOOP_PPQN / 2;
+    if ((tick % eighth) != 0) return 0;          // only exact 8th-note positions
+    if (((tick / eighth) & 1u) == 0) return 0;   // downbeat stays straight
+    return (uint32_t)(_swing - 50) * eighth / 50;
+}
+
+uint32_t LoopEngine::snapTick(uint32_t tick) const
+{
+    const uint32_t g = gridTicks();
+    if (!g) return tick;
+    uint32_t snapped = ((tick + g / 2) / g) * g;
+    const uint32_t len = loopLenTicks();
+    if (snapped >= len) snapped = (len > g) ? (len - g) : 0;
+    return snapped;
+}
+
+void LoopEngine::pushUndo(uint8_t gen, uint16_t count)
+{
+    if (_undoTop >= (uint8_t)(sizeof(_undo) / sizeof(_undo[0]))) {
+        for (int i = 1; i < (int)(sizeof(_undo) / sizeof(_undo[0])); ++i) {
+            _undo[i - 1] = _undo[i];
+        }
+        _undoTop = (uint8_t)(sizeof(_undo) / sizeof(_undo[0]) - 1);
+    }
+    _undo[_undoTop].gen = gen;
+    _undo[_undoTop].count = count;
+    ++_undoTop;
+}
+
+bool LoopEngine::undo()
+{
+    // During an overdub the take has not been merged yet: cancel it.
+    if (_state == LoopState::REC && _overdub) {
+        portENTER_CRITICAL(&_mux);
+        _takeN = 0;
+        _state = LoopState::PLAY;
+        _overdub = false;
+        _autoStop = false;
+        if (_undoTop > 0) --_undoTop;
+        portEXIT_CRITICAL(&_mux);
+        return true;
+    }
+    if (_undoTop == 0) return false;
+
+    const UndoEntry u = _undo[--_undoTop];
+    const LoopState prev = _state;
+
+    // Filter into the inactive buffer, then swap: the audio task may still be
+    // reading the active buffer while we compact it.
+    int w = 0;
+    for (int i = 0; i < _activeN; ++i) {
+        if (genOf(_active[i]) != u.gen) {
+            _inactive[w++] = _active[i];
+        }
+    }
+    _inactiveN = w;
+    swapBuffers();
+    __sync_synchronize();
+    ++_activeGen;
+    _idx = lowerBound(_active, _activeN, _phaseTick);
+    _state = (_activeN > 0 && prev == LoopState::PLAY) ? LoopState::PLAY : LoopState::STOP;
+    _overdub = false;
+    _takeN = 0;
+    _autoStop = false;
+    return true;
 }
 
 void LoopEngine::setBars(uint16_t bars)
@@ -55,6 +152,8 @@ bool LoopEngine::startFirst()
     _takeFull   = false;
     _overflow   = false;
     _armMs      = millis();
+    _gen        = 1;
+    _undoTop    = 0;
     portEXIT_CRITICAL(&_mux);
     return true;
 }
@@ -65,6 +164,16 @@ bool LoopEngine::startOverdub()
     if (_state == LoopState::REC || _state == LoopState::ARMED) return false;
 
     portENTER_CRITICAL(&_mux);
+    if (_gen >= 15) {
+        // Recycle generation tags; older takes are no longer undoable.
+        for (int i = 0; i < _activeN; ++i) _active[i].type &= 0x0F;
+        _gen = 1;
+        _undoTop = 0;
+    } else {
+        ++_gen;
+    }
+    pushUndo(_gen, (uint16_t)_activeN);
+
     if (_state != LoopState::PLAY) {
         _phaseQ16  = 0;
         _phaseTick = 0;
@@ -144,6 +253,9 @@ void LoopEngine::clear()
     _phaseTick = 0;
     _idx       = 0;
     _overflow  = false;
+    _gen       = 1;
+    _undoTop   = 0;
+    __sync_synchronize();
     ++_activeGen;
     portEXIT_CRITICAL(&_mux);
 }
@@ -180,20 +292,22 @@ void LoopEngine::onMidi(uint8_t status, uint8_t d1, uint8_t d2, uint32_t nowUs)
     LoopEvent e{};
     e.ch = ch;
 
+    uint8_t type = 0;
     if (hi == 0x90) {
-        if (d2 == 0) { e.type = LE_NOTE_OFF; e.d1 = d1; e.d2 = 0; }
-        else         { e.type = LE_NOTE_ON;  e.d1 = d1; e.d2 = d2; }
+        if (d2 == 0) { type = LE_NOTE_OFF; e.d1 = d1; e.d2 = 0; }
+        else         { type = LE_NOTE_ON;  e.d1 = d1; e.d2 = d2; }
     } else if (hi == 0x80) {
-        e.type = LE_NOTE_OFF; e.d1 = d1; e.d2 = 0;
+        type = LE_NOTE_OFF; e.d1 = d1; e.d2 = 0;
     } else if (hi == 0xB0 && d1 == 64) {
-        e.type = LE_CC64; e.d1 = 64; e.d2 = d2;
+        type = LE_CC64; e.d1 = 64; e.d2 = d2;
     } else if (hi == 0xB0 && d1 == 1) {
-        e.type = LE_CC1; e.d1 = 1; e.d2 = d2;
+        type = LE_CC1; e.d1 = 1; e.d2 = d2;
     } else if (hi == 0xE0) {
-        e.type = LE_PB; e.d1 = d1; e.d2 = d2;
+        type = LE_PB; e.d1 = d1; e.d2 = d2;
     } else {
         return;
     }
+    e.type = (uint8_t)((_gen << 4) | type);
 
     portENTER_CRITICAL(&_mux);
     if (_state == LoopState::ARMED) {
@@ -214,14 +328,14 @@ void LoopEngine::onMidi(uint8_t status, uint8_t d1, uint8_t d2, uint32_t nowUs)
     } else if (_state == LoopState::REC) {
         if (_overdub) {
             const uint32_t len = loopLenTicks();
-            e.tick = len ? (_phaseTick % len) : 0;
+            e.tick = snapTick(len ? (_phaseTick % len) : 0);
             appendTake(e);
         } else {
             const uint32_t t = (uint32_t)(((uint64_t)(nowUs - _originUs) * _bpmX10 * 8ull) / 10000000ull);
             if (t >= loopLenTicks()) {
                 _autoStop = true;
             } else {
-                e.tick = t;
+                e.tick = snapTick(t);
                 if (_inactiveN < MAX_LOOP_EVENTS) {
                     _inactive[_inactiveN++] = e;
                 } else {
@@ -267,8 +381,13 @@ uint8_t LoopEngine::pump(uint32_t frames)
 
     const uint32_t prevTick = _phaseTick;
     if (q >= lenQ) {
-        q %= lenQ;
+        // The tail may still be held back by swing; flush it at the boundary.
+        while (_idx < n) {
+            emit(act[_idx]);
+            ++_idx;
+        }
         _idx = 0;
+        q %= lenQ;
         if (_state == LoopState::REC) _autoStop = true;
     }
     _phaseQ16 = (uint32_t)q;
@@ -282,7 +401,10 @@ uint8_t LoopEngine::pump(uint32_t frames)
         if ((beat % LOOP_BEATS) == 0) _beatFlags |= 0x02;
     }
 
-    while (_idx < n && act[_idx].tick <= tick) {
+    while (_idx < n) {
+        uint32_t due = act[_idx].tick + swingOffsetTicks(act[_idx].tick);
+        if (due >= len) due = len - 1;   // never schedule past the loop end
+        if (due > tick) break;
         emit(act[_idx]);
         ++_idx;
     }
@@ -307,7 +429,7 @@ void LoopEngine::laneCounts(uint16_t out[4]) const
         n = _inactiveN;
     }
     for (int i = 0; i < n; ++i) {
-        if (a[i].type != LE_NOTE_ON) continue;
+        if (LoopEngine::typeOf(a[i]) != LE_NOTE_ON) continue;
         const int l = laneOfChannel(a[i].ch);
         if (l >= 0 && l < 4) ++out[l];
     }

@@ -15,12 +15,15 @@
 | USB Host | ESP32-S3 USB-OTG Host，MIDI IN + OUT 同时开；FM-1 自供电 |
 | 循环 | 1/2/4/8/16/32 小节；480 PPQN；内部 BPM 40–400 |
 | 叠录 | 已有循环时按 R 立即按当前相位叠录；循环继续播放 |
+| Quantize | `onMidi()` 入口把 tick 吸附到 OFF / 1/4 / 1/8 / 1/16 / 1/32 网格（默认 1/16） |
+| Swing | 50–75%；播放时对奇数 8 分格的事件动态加 tick 偏移，不改存储 |
+| Undo | `U` 撤销最后一次叠录；按 take generation 过滤，不会误删旧事件 |
 | 通道 | CH1 LEAD / CH2 PAD / CH3 BASS / CH10 DRUM，四 lane 同长度 |
 | 节拍器 | 本地 I2S click（2 kHz 重音 / 1.35 kHz 普通）；录音/播放可开关；首录可选 4 拍 count-in |
 | 走带 | Enter 播放/停止；停止时 panic（显式 Note Off + CC64/121/123/120） |
 | 保存 | `S` → `/MidiLoop/LOOP_xxxx.MID`，SMF Format 0、480 PPQN、EOT 在循环末尾 |
 | 文件管理 | `FILE` 页删除 / 改名；只显示 `.mid` / `.midi` |
-| 设置 | BPM、小节数、click、count-in；NVS 保存 |
+| 设置 | BPM、小节、Quantize、Swing、click、count-in；NVS 保存 |
 | UI | 两个标签页 LOOP / FILE + 设置浮层；240×135 sprite |
 
 事件类型：Note On/Off、CC64 延音、CC1 调制、Pitch Bend。**不发送** Program Change。
@@ -73,11 +76,11 @@ LOOP 页：走带状态、`BAR n/N`、BPM、循环进度/拍点、四 lane 计�
 
 FILE 页：`/MIDILOOP` 路径、文件数、6 行列表（文件名 + 大小），选中行反色。
 
-设置浮层：BPM / BARS / CLICK / COUNT-IN，`;` / `.` 选行，`,` / `/` 改值，`Bksp` / `G` / `Tab` 关闭。
+设置浮层：BPM / BARS / QUANT / SWING / CLICK / COUNT-IN，`;` / `.` 选行，`,` / `/` 改值，`Bksp` / `G` / `Tab` 关闭。
 
 ### 3.1 Web 逻辑自检
 
-[web/test.html](<web/test.html>) 直接跑 **11 个场景**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤、early stop、8192 容量、停止/清空、ARMED 超时、拍点。当前结果 **ALL PASS**。
+[web/test.html](<web/test.html>) 直接跑 **14 个场景**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤、early stop、8192 容量、停止/清空、ARMED 超时、拍点、Quantize、Swing、Undo。当前结果 **ALL PASS**。
 
 ![Web logic tests](docs/ui/logic-tests.png)
 
@@ -88,7 +91,7 @@ node web/test/run-node.js
 # RESULT OK
 ```
 
-`pwsh tools/web-smoke.ps1` 会启动 headless Edge，通过 CDP 真实点击/按键走一遍交互流程（count-in → REC → 自动停 → OVERDUB → SAVE → CLEAR → early stop → BARS 保护），当前 **18 项检查全通过**。
+`pwsh tools/web-smoke.ps1` 会启动 headless Edge，通过 CDP 真实点击/按键走一遍交互流程（count-in → REC → 自动停 → OVERDUB → UNDO → SAVE → CLEAR → early stop → BARS 保护），当前 **19 项检查全通过**。
 
 > 这验证的是 Web 模型（`web/engine.js`）与 UI 交互契约；固件侧的 C++ 实现对同一组场景另有 host test（第 9 节）。两者都通过，但仍**不能替代** USB/ES8311/SD 的真机验证。
 
@@ -104,6 +107,7 @@ node web/test/run-node.js
 | `Enter` | 播放 / 停止 |
 | `S` | 保存为 `/MidiLoop/LOOP_xxxx.MID`（会先停止播放） |
 | `C` | 清空循环 |
+| `U` | 撤销最后一次叠录（叠录中按 U 取消当前 take） |
 | `M` | 节拍器开 / 关 |
 | `G` | 打开设置浮层 |
 | `Tab` | 切到 FILE |
@@ -130,8 +134,8 @@ node web/test/run-node.js
 | 键 | 动作 |
 |---|---|
 | `;` / `.` | 选行 |
-| `,` / `/` | 改值（BPM ±5、BARS 切换、CLICK/COUNT-IN 开关） |
-| `Enter` | 开关当前项；BPM/BARS 行关闭浮层 |
+| `,` / `/` | 改值（BPM ±5、BARS 切换、QUANT 切换、SWING ±5、CLICK/COUNT-IN 开关） |
+| `Enter` | 开关当前项；BPM/BARS/QUANT/SWING 行关闭浮层；CLICK/COUNT-IN 切换 |
 | `Bksp` / `G` / `Tab` | 关闭 |
 
 ---
@@ -148,6 +152,9 @@ node web/test/run-node.js
 6. **保存**：`S` 先停止，再写 `/MidiLoop/LOOP_xxxx.MID`；EOT 落在 `loopLen`，不是最后一个事件。
 7. **改长度**：必须先 `C` 清空；有循环时改 BARS 会提示 `CLEAR FIRST`。
 8. **录音中禁改 BPM**：避免已录事件的时间戳跳变。
+9. **Quantize**：默认 `1/16`（120 ticks），在 `onMidi()` 入口吸附；可选 OFF / 1/4 / 1/8 / 1/16 / 1/32。首音 tick 0 不变。
+10. **Swing**：默认 50（直拍）；50–75% 时只对奇数 8 分格的事件在发送前加偏移（66% ≈ 76 ticks），存储的 tick 不变，保存的 MIDI 也是直拍。
+11. **Undo**：每次进入叠录取一个 take generation；`U` 过滤掉该 generation 的事件。因为叠录是排序合并，不能简单按数量截断，否则会误删旧事件。
 
 ---
 
@@ -205,8 +212,8 @@ firmware/src/
 
 | 项 | 值 |
 |---|---:|
-| 静态 RAM | 209,020 B / 327,680 B（63.8%） |
-| Flash | 671,969 B / 3,145,728 B（21.4%） |
+| 静态 RAM | 209,052 B / 327,680 B（63.8%） |
+| Flash | 674,057 B / 3,145,728 B（21.4%） |
 | 循环事件 | 2 × 8192 × 8 B + 4096 × 8 B = 160 KB |
 | UI sprite | 240 × 135 × 16 bpp = 64.8 KB（堆） |
 | 音频 | 44.1 kHz / 64 帧块 / 6 DMA |
@@ -237,7 +244,7 @@ test_loop.exe
 
 覆盖：
 
-- **loop engine**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤/lane 映射、early stop、8192 容量、停止/清空、ARMED 超时、拍点。
+- **loop engine**：小节/BPM clamp、首录、自动停、叠录相位、从停止叠录、通道过滤/lane 映射、early stop、8192 容量、停止/清空、ARMED 超时、拍点、Quantize、Swing、Undo（含排序合并后的 generation 过滤）。
 - **SMF writer**（`test_store.cpp` + fake `SD.h`）：MThd/MTrk、division 480、time signature 4/4、tempo、track name、事件 delta、EOT、`MTrk` 长度字段。**这个测试实际抓到并修掉了一个 track length 多 4 字节的 bug。**
 
 `test/host/Arduino.h` 和 `test/host/SD.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现、内存 SD），**不测试** USB、ES8311 和真机时序；同一组场景的 Web 版本见第 3.1 节。
@@ -250,7 +257,7 @@ test_loop.exe
 4. **容量**：8192 事件；32 小节 32 分单音刚好，16 分 4 音和弦 4 lane 会截断（`TAKE FULL` / 丢事件）。
 5. **叠录一次只叠一条 lane**：staging 4096；第一次录音可以四通道一起录（FM-1 sequencer）。
 6. **没有文件载入**：FILE 页只删除/改名，保存的 `.MID` 不能在固件里重新载入播放。
-7. **没有 per-lane mute/solo、quantize、undo**；只有 `C` 清空。
+7. **没有 per-lane mute/solo、自定义量化网格、三连音 swing**；Undo 栈保留最近 8 次叠录，超过后旧的 take 不再可撤销。
 8. **count-in 只作用于第一次录音**；叠录立即开始。
 9. **Sloop HOLD**：`ARP 2 → HOLD` 必须 OFF，否则停止后挂音；这是 Sloop 侧设置。
 10. **不发送 Program Change / SysEx**；只录 Note/CC64/CC1/PB。

@@ -48,7 +48,7 @@ static void refreshLibrary()
 
 static void emitEvent(const LoopEvent& e)
 {
-    switch (e.type) {
+    switch (LoopEngine::typeOf(e)) {
         case LE_NOTE_ON:  usbMidi.noteOn(e.ch, e.d1, e.d2); break;
         case LE_NOTE_OFF: usbMidi.noteOff(e.ch, e.d1); break;
         case LE_CC64:     usbMidi.controlChange(e.ch, 64, e.d2); break;
@@ -320,13 +320,40 @@ static void toggleClick()
     setToast(app.click ? "CLICK ON" : "CLICK OFF");
 }
 
+static void cycleQuantize(int dir)
+{
+    int q = (int)app.quantize + dir;
+    if (q < Q_OFF) q = Q_1_32;
+    if (q > Q_1_32) q = Q_OFF;
+    app.quantize = (uint8_t)q;
+    looper.setQuantize(app.quantize);
+    prefs.putUChar("quant", app.quantize);
+    static const char* names[] = {"OFF", "1/4", "1/8", "1/16", "1/32"};
+    setToast(names[app.quantize]);
+}
+
+static void cycleSwing(int dir)
+{
+    int s = (int)app.swing + dir * 5;
+    if (s < 50) s = 50;
+    if (s > 75) s = 75;
+    app.swing = (uint8_t)s;
+    looper.setSwing(app.swing);
+    prefs.putUChar("swing", app.swing);
+    char b[12];
+    snprintf(b, sizeof(b), "SWING %u", app.swing);
+    setToast(b);
+}
+
 static void adjustSetting(int dir)
 {
     switch (app.settingsRow) {
         case 0: adjustBpm(dir * 5); break;
         case 1: cycleBars(dir); break;
-        case 2: toggleClick(); break;
-        case 3: app.countIn = !app.countIn; prefs.putBool("cnt", app.countIn);
+        case 2: cycleQuantize(dir); break;
+        case 3: cycleSwing(dir); break;
+        case 4: toggleClick(); break;
+        case 5: app.countIn = !app.countIn; prefs.putBool("cnt", app.countIn);
                 setToast(app.countIn ? "COUNT-IN ON" : "COUNT-IN OFF"); break;
         default: break;
     }
@@ -340,7 +367,7 @@ static void handleKeys()
     static bool pEnter = false, pSpace = false, pDel = false, pTab = false;
     static bool pUp = false, pDown = false, pLeft = false, pRight = false;
     static bool pR = false, pS = false, pM = false, pG = false, pC = false;
-    static bool pD = false, pN = false, pMinus = false, pPlus = false;
+    static bool pD = false, pN = false, pMinus = false, pPlus = false, pU = false;
 
     const bool enter = ks.enter;
     const bool space = ks.space;
@@ -357,6 +384,7 @@ static void handleKeys()
     const bool ckey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('c');
     const bool dkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('d');
     const bool nkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('n');
+    const bool ukey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('u');
     const bool minus = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('-');
     const bool plus  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('=');
 
@@ -375,13 +403,14 @@ static void handleKeys()
     const bool eC = ckey && !pC;
     const bool eD = dkey && !pD;
     const bool eN = nkey && !pN;
+    const bool eU = ukey && !pU;
     const bool eMinus = minus && !pMinus;
     const bool ePlus  = plus && !pPlus;
 
     pEnter = enter; pSpace = space; pDel = del; pTab = tab;
     pUp = up; pDown = down; pLeft = left; pRight = right;
     pR = rkey; pS = skey; pM = mkey; pG = gkey; pC = ckey;
-    pD = dkey; pN = nkey; pMinus = minus; pPlus = plus;
+    pD = dkey; pN = nkey; pMinus = minus; pPlus = plus; pU = ukey;
 
     if (app.renaming) {
         char cur[32] = {0};
@@ -427,12 +456,12 @@ static void handleKeys()
     }
 
     if (app.settings) {
-        if (eUp)   app.settingsRow = (app.settingsRow + 3) % 4;
-        if (eDown) app.settingsRow = (app.settingsRow + 1) % 4;
+        if (eUp)   app.settingsRow = (app.settingsRow + 5) % 6;
+        if (eDown) app.settingsRow = (app.settingsRow + 1) % 6;
         if (eLeft) adjustSetting(-1);
         if (eRight) adjustSetting(+1);
         if (eEnter) {
-            if (app.settingsRow >= 2) adjustSetting(+1);
+            if (app.settingsRow >= 4) adjustSetting(+1);
             else app.settings = false;
         }
         if (eDel || eG || eTab) app.settings = false;
@@ -456,6 +485,11 @@ static void handleKeys()
         if (eS) saveLoop();
         if (eC) clearLoop();
         if (eM) toggleClick();
+        if (eU) {
+            const bool ok = looper.undo();
+            syncApp();
+            setToast(ok ? "UNDO" : "NOTHING TO UNDO");
+        }
         if (eG) { app.settings = true; app.settingsRow = 0; }
 
         if (!ks.fn && eMinus) adjustBpm(-1);
@@ -558,6 +592,11 @@ void setup()
     app.bars    = prefs.getUShort("bars", 4);
     app.click   = prefs.getBool("click", true);
     app.countIn = prefs.getBool("cnt", true);
+    app.quantize = prefs.getUChar("quant", Q_1_16);
+    app.swing    = prefs.getUChar("swing", 50);
+    if (app.quantize > Q_1_32) app.quantize = Q_1_16;
+    if (app.swing < 50) app.swing = 50;
+    if (app.swing > 75) app.swing = 75;
     app.selectedLane = prefs.getUChar("lane", 0);
     if (app.bpmX10 < 400 || app.bpmX10 > 4000) app.bpmX10 = 1200;
     if (app.bars < 1 || app.bars > LOOP_MAX_BARS) app.bars = 4;
@@ -574,6 +613,8 @@ void setup()
     looper.begin();
     looper.setBars(app.bars);
     looper.setBpm(app.bpmX10);
+    looper.setQuantize(app.quantize);
+    looper.setSwing(app.swing);
     looper.setSink(emitEvent);
 
     audio.start();

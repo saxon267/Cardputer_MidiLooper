@@ -11,9 +11,17 @@ enum LoopEventType : uint8_t {
     LE_PB       = 5,
 };
 
+enum QuantizeGrid : uint8_t {
+    Q_OFF   = 0,
+    Q_1_4   = 1,
+    Q_1_8   = 2,
+    Q_1_16  = 3,
+    Q_1_32  = 4,
+};
+
 struct LoopEvent {
     uint32_t tick;   // 0 .. loopLen-1, 480 PPQN
-    uint8_t  type;
+    uint8_t  type;   // low nibble = LoopEventType, high nibble = take generation
     uint8_t  d1;     // note / CC number / PB LSB
     uint8_t  d2;     // velocity / CC value / PB MSB
     uint8_t  ch;     // 0..15
@@ -31,12 +39,20 @@ public:
     uint16_t bpmX10() const { return _bpmX10; }
     uint32_t loopLenTicks() const { return (uint32_t)_bars * LOOP_BEATS * LOOP_PPQN; }
 
+    void     setQuantize(uint8_t q);
+    uint8_t  quantize() const { return _quantize; }
+    uint32_t gridTicks() const;
+    void     setSwing(uint8_t pct);
+    uint8_t  swing() const { return _swing; }
+    uint32_t swingOffsetTicks(uint32_t tick) const;
+
     bool startFirst();
     bool startOverdub();
     void stopRecord();
     bool play();
     void stop();
     void clear();
+    bool undo();
     void service();                 // main task: finish auto-stop / arm timeout
 
     void onMidi(uint8_t status, uint8_t d1, uint8_t d2, uint32_t nowUs);
@@ -58,11 +74,20 @@ public:
 
     void setSink(void (*sink)(const LoopEvent&)) { _sink = sink; }
 
+    static uint8_t typeOf(const LoopEvent& e) { return e.type & 0x0F; }
+    static uint8_t genOf(const LoopEvent& e)  { return e.type >> 4; }
     static int  laneOfChannel(uint8_t ch);
     static bool channelAllowed(uint8_t ch);
 
 private:
+    struct UndoEntry {
+        uint8_t  gen;
+        uint16_t count;
+    };
+
     static int cmpEvent(const void* a, const void* b);
+    uint32_t snapTick(uint32_t tick) const;
+    void pushUndo(uint8_t gen, uint16_t count);
     void finishFirst();
     void finishOverdub();
     void appendTake(const LoopEvent& e);
@@ -96,8 +121,15 @@ private:
     volatile uint32_t _armMs     = 0;
     volatile uint8_t  _beatFlags = 0;
 
-    uint16_t _bars   = 4;
-    uint16_t _bpmX10 = 1200;
+    uint16_t _bars     = 4;
+    uint16_t _bpmX10   = 1200;
+    uint8_t  _quantize = Q_1_16;
+    uint8_t  _swing    = 50;
+    uint8_t  _gen      = 1;
+
+    UndoEntry _undo[8] = {};
+    uint8_t   _undoTop = 0;
+
     void   (*_sink)(const LoopEvent&) = nullptr;
 
     portMUX_TYPE _mux = portMUX_INITIALIZER_UNLOCKED;

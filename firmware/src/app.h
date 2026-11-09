@@ -11,6 +11,8 @@ struct App {
     uint8_t  selectedLane = 0;
     uint16_t bars         = 4;
     uint16_t bpmX10       = 1200;
+    uint8_t  quantize     = Q_1_16;
+    uint8_t  swing        = 50;
     bool     click        = true;
     bool     countIn      = true;
     bool     settings     = false;

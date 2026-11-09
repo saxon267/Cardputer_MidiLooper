@@ -49,7 +49,8 @@ bool LoopStore::save(const LoopEvent* ev, int n, uint16_t bpmX10, uint16_t bars,
     uint32_t trackLen = 8 + 7 + (4 + nameLen);  // time sig + tempo + track name
     uint32_t prev = 0;
     for (int i = 0; i < n; ++i) {
-        if (ev[i].type < LE_NOTE_ON || ev[i].type > LE_PB) continue;
+        const uint8_t type = LoopEngine::typeOf(ev[i]);
+        if (type < LE_NOTE_ON || type > LE_PB) continue;
         uint32_t t = ev[i].tick;
         if (t > loopLen) t = loopLen;
         if (t < prev) t = prev;
@@ -83,7 +84,8 @@ bool LoopStore::save(const LoopEvent* ev, int n, uint16_t bpmX10, uint16_t bars,
 
     prev = 0;
     for (int i = 0; i < n; ++i) {
-        if (ev[i].type < LE_NOTE_ON || ev[i].type > LE_PB) continue;
+        const uint8_t type = LoopEngine::typeOf(ev[i]);
+        if (type < LE_NOTE_ON || type > LE_PB) continue;
         if ((i & 255) == 0) delay(1);   // keep the idle task fed on big loops
         uint32_t t = ev[i].tick;
         if (t > loopLen) t = loopLen;
@@ -94,7 +96,7 @@ bool LoopStore::save(const LoopEvent* ev, int n, uint16_t bpmX10, uint16_t bars,
         prev = t;
 
         const LoopEvent& e = ev[i];
-        switch (e.type) {
+        switch (LoopEngine::typeOf(e)) {
             case LE_NOTE_ON:
                 *p++ = (uint8_t)(0x90 | (e.ch & 15)); *p++ = e.d1 & 0x7F; *p++ = e.d2 & 0x7F;
                 break;

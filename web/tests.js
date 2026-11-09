@@ -9,7 +9,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.LoopTests = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (mod) {
-  const { LoopEngine, LoopState, LoopEventType } = mod;
+  const { LoopEngine, LoopState, LoopEventType, QuantizeGrid, typeOf } = mod;
 
   function runTests() {
     const results = [];
@@ -119,6 +119,7 @@
 
     test('overdub starts at current phase and merges', () => {
       const e = fresh(1, 1200);
+      e.setQuantize(QuantizeGrid.OFF);
       makeLoop(e);
       const base = e.count();
       eq(base, 4);
@@ -139,7 +140,7 @@
 
       let best = -1;
       for (const ev of e.events) {
-        if (ev.ch === 1 && ev.type === LoopEventType.NOTE_ON) best = ev.tick;
+        if (ev.ch === 1 && typeOf(ev) === LoopEventType.NOTE_ON) best = ev.tick;
       }
       assert(best >= 0, 'overdubbed note exists');
       assert(Math.abs(best - phase) <= 2,
@@ -249,6 +250,88 @@
       }
       eq(normal, 1, 'one normal beat in the window');
       eq(accent, 0, 'bar accent is not due yet');
+    });
+
+    test('quantize snaps first-take ticks to the grid', () => {
+      const e = fresh(1, 1200);
+      e.setQuantize(QuantizeGrid.Q16);
+      eq(e.gridTicks(), 120);
+      e.startFirst();
+      e.onMidi(0x90, 60, 100, 0);          // tick 0
+      e.onMidi(0x90, 62, 100, 104200);     // tick 100 -> 120
+      e.stopRecord();
+      eq(e.count(), 2);
+      eq(e.events[1].tick, 120);
+
+      const off = fresh(1, 1200);
+      off.setQuantize(QuantizeGrid.OFF);
+      off.startFirst();
+      off.onMidi(0x90, 60, 100, 0);
+      off.onMidi(0x90, 62, 100, 104200);
+      off.stopRecord();
+      eq(off.events[1].tick, 100);
+    });
+
+    test('swing delays the odd 8th but keeps the downbeat', () => {
+      const e = fresh(1, 1200);
+      e.setQuantize(QuantizeGrid.OFF);
+      e.setSwing(66);
+      eq(e.swingOffsetTicks(240), 76);
+      eq(e.swingOffsetTicks(480), 0);
+
+      e.startFirst();
+      e.onMidi(0x90, 60, 100, 0);          // tick 0
+      e.onMidi(0x90, 62, 100, 250000);     // tick 240
+      e.onMidi(0x90, 64, 100, 500000);     // tick 480
+      e.stopRecord();
+      eq(e.count(), 3);
+
+      const hits = [];
+      e.onEvent = ev => hits.push({ ev: ev.tick, at: e.positionTicks() });
+      e.play();
+      for (let i = 0; i < 400; ++i) block(e, 1);
+
+      eq(hits.length, 3);
+      eq(hits[0].ev, 0);
+      eq(hits[1].ev, 240);
+      assert(hits[1].at >= 315 && hits[1].at <= 320,
+        'swing delayed tick: ' + hits[1].at);
+      eq(hits[2].ev, 480);
+      assert(hits[2].at >= 480 && hits[2].at <= 482,
+        'downbeat stays on time: ' + hits[2].at);
+    });
+
+    test('undo removes the last take even when it interleaves', () => {
+      const e = fresh(1, 1200);
+      e.setQuantize(QuantizeGrid.OFF);
+
+      e.startFirst();
+      e.onMidi(0x90, 60, 100, 0);          // base at 0
+      e.onMidi(0x90, 62, 100, 500000);     // base at 480
+      e.stopRecord();
+      eq(e.count(), 2);
+
+      e.startOverdub();
+      block(e, 140);
+      e.onMidi(0x91, 67, 100, 2000000);    // ~195
+      block(e, 70);
+      e.onMidi(0x91, 69, 100, 2000000);    // ~292
+      e.stopRecord();
+      eq(e.count(), 4);
+
+      assert(e.undo(), 'undo last take');
+      eq(e.count(), 2);
+      eq(e.events[0].tick, 0);
+      eq(e.events[1].tick, 480);           // base survives, not first 2 sorted
+      assert(!e.undo(), 'no more undo');
+
+      // U during an active overdub cancels the take.
+      e.startOverdub();
+      block(e, 50);
+      e.onMidi(0x92, 72, 100, 3000000);
+      assert(e.undo(), 'cancel active take');
+      eq(e.state, LoopState.PLAY);
+      eq(e.count(), 2);
     });
 
     return results;
