@@ -320,9 +320,13 @@ static void testQuantize()
     noteOn(e, 0, 60, 100);              // tick 0
     g_test_us = 104200;                 // t = 100 ticks -> snapped 120
     noteOn(e, 0, 62, 100);
+    g_test_us = 125000;                 // t = 120 ticks: off must stay after on
+    noteOff(e, 0, 62);
     e.stopRecord();
-    CHECK(e.count() == 2);
+    CHECK(e.count() == 3);
     CHECK(e.events()[1].tick == 120);
+    CHECK(e.events()[2].tick == 121);
+    CHECK(LoopEngine::typeOf(e.events()[2]) == LE_NOTE_OFF);
 
     // Q_OFF leaves the raw tick.
     resetEngine(e, 1, 1200);

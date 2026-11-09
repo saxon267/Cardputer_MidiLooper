@@ -23,6 +23,7 @@ void LoopEngine::begin()
     _gen = 1;
     _undoTop = 0;
     for (int i = 0; i < 4; ++i) _mute[i] = false;
+    resetLastOn();
 }
 
 void LoopEngine::setQuantize(uint8_t q)
@@ -65,6 +66,27 @@ uint32_t LoopEngine::snapTick(uint32_t tick) const
     const uint32_t len = loopLenTicks();
     if (snapped >= len) snapped = (len > g) ? (len - g) : 0;
     return snapped;
+}
+
+void LoopEngine::resetLastOn()
+{
+    for (int lane = 0; lane < 4; ++lane) {
+        for (int note = 0; note < 128; ++note) _lastOn[lane][note] = 0xFFFF;
+    }
+}
+
+uint32_t LoopEngine::guardNoteOff(uint32_t tick, uint8_t ch, uint8_t note) const
+{
+    const int lane = laneOfChannel(ch);
+    if (lane < 0 || note >= 128) return tick;
+    const uint16_t on = _lastOn[lane][note];
+    if (on != 0xFFFF && tick <= on) {
+        const uint32_t len = loopLenTicks();
+        tick = (uint32_t)on + 1;
+        if (tick >= len) tick = len ? (len - 1) : 0;
+    }
+    _lastOn[lane][note] = 0xFFFF;
+    return tick;
 }
 
 void LoopEngine::pushUndo(uint8_t gen, uint16_t count)
@@ -155,6 +177,7 @@ bool LoopEngine::startFirst()
     _armMs      = millis();
     _gen        = 1;
     _undoTop    = 0;
+    resetLastOn();
     portEXIT_CRITICAL(&_mux);
     return true;
 }
@@ -188,6 +211,7 @@ bool LoopEngine::startOverdub()
     _takeFull = false;
     _overflow = false;
     _startPulse = (_phaseTick == 0);
+    resetLastOn();
     portEXIT_CRITICAL(&_mux);
     return true;
 }
@@ -256,6 +280,7 @@ void LoopEngine::clear()
     _overflow  = false;
     _gen       = 1;
     _undoTop   = 0;
+    resetLastOn();
     __sync_synchronize();
     ++_activeGen;
     portEXIT_CRITICAL(&_mux);
@@ -292,6 +317,7 @@ bool LoopEngine::loadCommit(int n, uint16_t bars)
     _startPulse = false;
     _gen = 1;
     _undoTop = 0;
+    resetLastOn();
     __sync_synchronize();
     ++_activeGen;
     portEXIT_CRITICAL(&_mux);
@@ -379,18 +405,39 @@ void LoopEngine::onMidi(uint8_t status, uint8_t d1, uint8_t d2, uint32_t nowUs)
         _overflow = false;
         _startPulse = true;
         e.tick = 0;
+        if (type == LE_NOTE_ON) {
+            const int lane = laneOfChannel(ch);
+            if (lane >= 0) _lastOn[lane][e.d1] = 0;
+        }
         if (_inactiveN < MAX_LOOP_EVENTS) _inactive[_inactiveN++] = e;
     } else if (_state == LoopState::REC) {
         if (_overdub) {
             const uint32_t len = loopLenTicks();
-            e.tick = snapTick(len ? (_phaseTick % len) : 0);
+            const uint32_t raw = len ? (_phaseTick % len) : 0;
+            if (type == LE_NOTE_OFF) {
+                e.tick = guardNoteOff(raw, ch, e.d1);
+            } else {
+                e.tick = snapTick(raw);
+                if (type == LE_NOTE_ON) {
+                    const int lane = laneOfChannel(ch);
+                    if (lane >= 0) _lastOn[lane][e.d1] = (uint16_t)e.tick;
+                }
+            }
             appendTake(e);
         } else {
             const uint32_t t = (uint32_t)(((uint64_t)(nowUs - _originUs) * _bpmX10 * 8ull) / 10000000ull);
             if (t >= loopLenTicks()) {
                 _autoStop = true;
             } else {
-                e.tick = snapTick(t);
+                if (type == LE_NOTE_OFF) {
+                    e.tick = guardNoteOff(t, ch, e.d1);
+                } else {
+                    e.tick = snapTick(t);
+                    if (type == LE_NOTE_ON) {
+                        const int lane = laneOfChannel(ch);
+                        if (lane >= 0) _lastOn[lane][e.d1] = (uint16_t)e.tick;
+                    }
+                }
                 if (_inactiveN < MAX_LOOP_EVENTS) {
                     _inactive[_inactiveN++] = e;
                 } else {
@@ -530,6 +577,7 @@ void LoopEngine::appendTake(const LoopEvent& e)
         _take[_takeN++] = e;
     } else {
         _takeFull = true;
+        _overflow = true;
         _autoStop = true;
     }
 }

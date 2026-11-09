@@ -96,6 +96,8 @@ private:
 
     static int cmpEvent(const void* a, const void* b);
     uint32_t snapTick(uint32_t tick) const;
+    uint32_t guardNoteOff(uint32_t tick, uint8_t ch, uint8_t note) const;
+    void resetLastOn();
     void pushUndo(uint8_t gen, uint16_t count);
     void finishFirst();
     void finishOverdub();
@@ -136,6 +138,7 @@ private:
     uint8_t  _swing    = 50;
     uint8_t  _gen      = 1;
     volatile bool _mute[4] = {false, false, false, false};
+    mutable uint16_t _lastOn[4][128] = {};
 
     UndoEntry _undo[8] = {};
     uint8_t   _undoTop = 0;

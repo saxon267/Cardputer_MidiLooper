@@ -41,6 +41,7 @@ public:
     bool clockValid() const;
     uint16_t activeNotes() const;
     uint16_t lastPanicNotes() const { return _lastPanicNotes; }
+    uint32_t inputCount() const { return _rx; }
 
 private:
     static constexpr int QSIZE = 1024;
@@ -86,6 +87,7 @@ private:
     void*                    _inCtx = nullptr;
 
     uint32_t                 _on[16][4] = {};
+    uint32_t                 _rx = 0;
     volatile uint16_t        _bpmX10 = 0;
     volatile int64_t         _lastClockUs = 0;
     volatile bool            _clockValid = false;

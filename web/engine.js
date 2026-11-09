@@ -52,6 +52,7 @@
       this.gen = 1;
       this.undoStack = [];      // { gen, count }
       this.muteLanes = [false, false, false, false];
+      this.lastOn = Array.from({ length: 4 }, () => new Array(128).fill(-1));
     }
 
     loopLenTicks() { return this.bars * BEATS * PPQN; }
@@ -111,6 +112,23 @@
       return snapped;
     }
 
+    resetLastOn() {
+      for (let lane = 0; lane < 4; ++lane) this.lastOn[lane].fill(-1);
+    }
+
+    guardNoteOff(tick, ch, note) {
+      const lane = laneOfChannel(ch);
+      if (lane < 0 || note < 0 || note > 127) return tick;
+      const on = this.lastOn[lane][note];
+      if (on >= 0 && tick <= on) {
+        const len = this.loopLenTicks();
+        tick = on + 1;
+        if (tick >= len) tick = len ? len - 1 : 0;
+      }
+      this.lastOn[lane][note] = -1;
+      return tick;
+    }
+
     pushUndo(gen, count) {
       this.undoStack.push({ gen, count });
       if (this.undoStack.length > 8) this.undoStack.shift();
@@ -153,6 +171,7 @@
       this.startPulse = false;
       this.gen = 1;
       this.undoStack = [];
+      this.resetLastOn();
       return true;
     }
 
@@ -195,6 +214,7 @@
       this.armMs = this.nowMs;
       this.gen = 1;
       this.undoStack = [];
+      this.resetLastOn();
       return true;
     }
 
@@ -224,6 +244,7 @@
       this.takeFull = false;
       this.overflow = false;
       this.startPulse = this.phaseTick === 0;
+      this.resetLastOn();
       return true;
     }
 
@@ -276,6 +297,7 @@
       this.takeFull = false;
       this.overflow = false;
       this.startPulse = false;
+      this.resetLastOn();
     }
 
     service(nowMs = this.nowMs) {
@@ -331,18 +353,39 @@
         this.overflow = false;
         this.startPulse = true;
         e.tick = 0;
+        if (type === Type.NOTE_ON) {
+          const lane = laneOfChannel(ch);
+          if (lane >= 0) this.lastOn[lane][e.d1] = 0;
+        }
         this.inactive.push(e);          // tick 0
       } else if (this.state === State.REC) {
         if (this.overdub) {
           const len = this.loopLenTicks();
-          e.tick = this.snapTick(len ? (this.phaseTick % len) : 0);
+          const raw = len ? (this.phaseTick % len) : 0;
+          if (type === Type.NOTE_OFF) {
+            e.tick = this.guardNoteOff(raw, ch, e.d1);
+          } else {
+            e.tick = this.snapTick(raw);
+            if (type === Type.NOTE_ON) {
+              const lane = laneOfChannel(ch);
+              if (lane >= 0) this.lastOn[lane][e.d1] = e.tick;
+            }
+          }
           this.appendTake(e);
         } else {
           const t = Math.floor((nowUs - this.originUs) * this.bpmX10 * 8 / 10000000);
           if (t >= this.loopLenTicks()) {
             this.autoStop = true;
           } else if (this.inactive.length < MAX_EVENTS) {
-            e.tick = this.snapTick(t);
+            if (type === Type.NOTE_OFF) {
+              e.tick = this.guardNoteOff(t, ch, e.d1);
+            } else {
+              e.tick = this.snapTick(t);
+              if (type === Type.NOTE_ON) {
+                const lane = laneOfChannel(ch);
+                if (lane >= 0) this.lastOn[lane][e.d1] = e.tick;
+              }
+            }
             this.inactive.push(e);
           } else {
             this.overflow = true;
@@ -426,7 +469,7 @@
 
     appendTake(e) {
       if (this.take.length < MAX_TAKE) this.take.push(e);
-      else { this.takeFull = true; this.autoStop = true; }
+      else { this.takeFull = true; this.overflow = true; this.autoStop = true; }
     }
 
     finishFirst() {

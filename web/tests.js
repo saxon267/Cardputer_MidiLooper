@@ -259,9 +259,12 @@
       e.startFirst();
       e.onMidi(0x90, 60, 100, 0);          // tick 0
       e.onMidi(0x90, 62, 100, 104200);     // tick 100 -> 120
+      e.onMidi(0x80, 62, 0, 125000);       // tick 120: off stays after on
       e.stopRecord();
-      eq(e.count(), 2);
+      eq(e.count(), 3);
       eq(e.events[1].tick, 120);
+      eq(e.events[2].tick, 121);
+      eq(typeOf(e.events[2]), LoopEventType.NOTE_OFF);
 
       const off = fresh(1, 1200);
       off.setQuantize(QuantizeGrid.OFF);

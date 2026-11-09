@@ -621,9 +621,10 @@ static void handleSerial()
         const int c = Serial.read();
         if (c < 0) break;
         if (c == 'i' || c == 'I') {
-            Serial.printf("[loop] state=%d bars=%u bpm=%u ev=%d take=%d phase=%u heap=%u\n",
+            Serial.printf("[loop] state=%d bars=%u bpm=%u ev=%d take=%d phase=%u rx=%u ovf=%d heap=%u\n",
                           (int)looper.state(), app.bars, app.bpmX10 / 10, looper.count(),
                           looper.takeCount(), (unsigned)looper.phasePermille(),
+                          (unsigned)usbMidi.inputCount(), looper.overflow() ? 1 : 0,
                           (unsigned)ESP.getFreeHeap());
         } else if (c == 'r' || c == 'R') {
             toggleRecord();
@@ -715,6 +716,14 @@ void loop()
     M5Cardputer.update();
     syncApp();
     looper.service();
+
+    // If the event buffer fills, surface it instead of silently truncating.
+    static bool overflowWarned = false;
+    if (looper.overflow() && !overflowWarned) {
+        overflowWarned = true;
+        setToast("EVENT LIMIT");
+    }
+    if (!looper.overflow()) overflowWarned = false;
 
     // USB unplug while recording: finish the take instead of leaving it stuck.
     if (!app.usbConnected &&

@@ -82,6 +82,7 @@ void UsbMidiHost::handleInput(usb_transfer_t& t)
             if (p[1] == 0xF8) {
                 clockPulse();
             } else if (p[1] >= 0x80 && p[1] < 0xF0 && _inCb) {
+                ++_rx;
                 _inCb(p[1], p[2], p[3], _inCtx);
             }
         }
@@ -147,6 +148,7 @@ void UsbMidiHost::openDevice(uint8_t address)
     _head = _tail = 0;
     _clockValid = false;
     _lastClockUs = 0;
+    _rx = 0;
     memset(_on, 0, sizeof(_on));
 
     const usb_device_desc_t* dd = nullptr;

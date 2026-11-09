@@ -2,7 +2,7 @@
 
 240×135、Gruvbox Dark 的四通道 MIDI 循环叠录固件。Cardputer-Adv 作为 **USB-C Host** 直连 M-VAVE FM-1（Sloop），把 FM-1 的 CH1/2/3/10 录成循环，叠录后回放给 FM-1 发声。
 
-> **状态 v1.0.0**：用户已上机确认可用；UI/逻辑测试与 PlatformIO 编译通过。包含 `.mid` 文件载入播放、per-lane Mute、Quantize、Swing、Undo。  
+> **状态**：v1.0.0 已发布（上机确认可用）；main 上的 **v1.0.1 是 4 轨 seq 丢音修复候选，尚未发版**。  
 > **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.0.0>
 
 ![LOOP 播放](docs/ui/loop-play.png)
@@ -16,7 +16,7 @@
 | USB Host | ESP32-S3 USB-OTG Host，MIDI IN + OUT 同时开；FM-1 自供电 |
 | 循环 | 1/2/4/8/16/32 小节；480 PPQN；内部 BPM 40–400 |
 | 叠录 | 已有循环时按 R 立即按当前相位叠录；循环继续播放 |
-| Quantize | `onMidi()` 入口把 tick 吸附到 OFF / 1/4 / 1/8 / 1/16 / 1/32 网格（默认 1/16） |
+| Quantize | `onMidi()` 入口把 note-on / CC / PB 的 tick 吸附到网格（默认 1/16）；note-off 保留原始时长 |
 | Swing | 50–75%；播放时对奇数 8 分格的事件动态加 tick 偏移，不改存储 |
 | Undo | `U` 撤销最后一次叠录；按 take generation 过滤，不会误删旧事件 |
 | 文件播放 | FILE 页 `Enter` 载入 `/MidiLoop` 里的 `.mid`，按文件 tempo/bars 播放 |
@@ -156,7 +156,7 @@ node web/test/run-node.js
 6. **保存**：`S` 先停止，再写 `/MidiLoop/LOOP_xxxx.MID`；EOT 落在 `loopLen`，不是最后一个事件。
 7. **改长度**：必须先 `C` 清空；有循环时改 BARS 会提示 `CLEAR FIRST`。
 8. **录音中禁改 BPM**：避免已录事件的时间戳跳变。
-9. **Quantize**：默认 `1/16`（120 ticks），在 `onMidi()` 入口吸附；可选 OFF / 1/4 / 1/8 / 1/16 / 1/32。首音 tick 0 不变。
+9. **Quantize**：默认 `1/16`（120 ticks），只吸附 note-on / CC / PB；note-off 不吸附，保持音符原始时长。如果 note-off 落到对应 note-on 之前，会 clamp 到 on+1 tick，避免零长度/挂音。首音 tick 0 不变。
 10. **Swing**：默认 50（直拍）；50–75% 时只对奇数 8 分格的事件在发送前加偏移（66% ≈ 76 ticks），存储的 tick 不变，保存的 MIDI 也是直拍。
 11. **Undo**：每次进入叠录取一个 take generation；`U` 过滤掉该 generation 的事件。因为叠录是排序合并，不能简单按数量截断，否则会误删旧事件。
 12. **文件播放**：FILE 页 `Enter` 读取 SMF（Format 0/1、480 PPQN 转换、tempo、EOT），载入 inactive buffer 后提交并播放；`C` 只清 RAM 轨道，`.mid` 文件保留。
@@ -218,8 +218,8 @@ firmware/src/
 
 | 项 | 值 |
 |---|---:|
-| 静态 RAM | 209,060 B / 327,680 B（63.8%） |
-| Flash | 677,897 B / 3,145,728 B（21.5%） |
+| 静态 RAM | 210,092 B / 327,680 B（64.1%，1.0.1 候选；v1.0.0 为 209,060） |
+| Flash | 678,553 B / 3,145,728 B（21.6%，1.0.1 候选；v1.0.0 为 677,897） |
 | 循环事件 | 2 × 8192 × 8 B + 4096 × 8 B = 160 KB |
 | UI sprite | 240 × 135 × 16 bpp = 64.8 KB（堆） |
 | 音频 | 44.1 kHz / 64 帧块 / 6 DMA |
@@ -255,7 +255,7 @@ test_loop.exe
 
 `test/host/Arduino.h` 和 `test/host/SD.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现、内存 SD），**不测试** USB、ES8311 和真机时序；同一组场景的 Web 版本见第 3.1 节。
 
-## 10. 已知限制（v0.1 诚实列表）
+## 10. 已知限制（v1.0.0）
 
 1. **USB Host 已上机确认**；不同 FM-1 批次/描述符仍可能有枚举差异，换设备时先看顶栏 USB 状态。
 2. **不同步 FM-1 sequencer 的小节相位**：不解析 FA/FB/FC；只支持内部 BPM 为主。要同步需后续加 transport + Sloop 外部时钟。
@@ -263,11 +263,24 @@ test_loop.exe
 4. **叠录一次只叠一条 lane**：staging 4096；第一次录音可以四通道一起录（FM-1 sequencer）。
 5. **文件载入**：只支持 SMF Format 0/1、非 SMPTE；超过 32 小节或 8192 事件会拒绝/截断；载入只进 RAM，`C` 不会删除文件。
 6. **没有 solo、自定义量化网格、三连音 swing**；Undo 栈保留最近 8 次叠录，超过后旧的 take 不再可撤销。
-7. **Quantize 对 note-on/off 都生效**：极短音符的 on/off 可能被压到同一 tick（当前没有最小长度保护）；**Swing 只作用于精确 8 分格**，不做 16 分/三连音 swing。
+7. **Quantize 只吸附 note-on / CC / PB**，note-off 保留时长；如果 note-off 仍早于 note-on 会 clamp 到 on+1。**Swing 只作用于精确 8 分格**，不做 16 分/三连音 swing。
 8. **count-in 只作用于第一次录音**；叠录立即开始。
 9. **Sloop HOLD**：`ARP 2 → HOLD` 必须 OFF，否则停止后挂音；这是 Sloop 侧设置。
 10. **不发送 Program Change / SysEx**；只录 Note/CC64/CC1/PB。
 11. **旧版文件 tempo**：v0.1 旧构建保存的 `.mid` tempo 可能只有正确值的 1/10；本轮已修 writer，载入时对 `tempo < 150000` 做 ×10 兼容，仍建议用新固件重新保存一次。
+
+### 10.1 4 轨 seq 同时播放时“丢音”排查
+
+1. **先看串口 `i`**：输出 `rx` 是 USB Host 实际收到的通道消息数，`ev` 是已存事件数，`ovf=1` 表示事件缓冲满。  
+   - `rx` 明显大于 `ev` 且 `ovf=0`：问题在录制/量化路径。  
+   - `ovf=1` / 屏幕出现 `EVENT LIMIT`：8192 事件或叠录 4096 staging 不够，减少 bars/轨道密度，或避免同时叠 4 轨。  
+   - `rx` 本身很低：查 USB 线、Hub、供电和 FM-1 的 `OUT=SEQ`。
+2. **量化**：旧版把 note-off 也吸附，32 分/带 swing 的 seq 会把 note-on/off 压到同一 tick，听起来像丢音。本轮已改为只吸附 note-on，note-off 保留时长，并用 `on+1` 兜底。默认 `1/16` 对 32 分 seq 仍会压成 16 分；需要原样请设 `QUANT=1/32` 或 `OFF`。
+3. **通道映射**：Sloop 第 4 轨必须是 `CH4=10`（DRUM）；如果映射到别的通道，整轨会被过滤。
+4. **Sloop**：`OUT=SEQ`、`ARP 2 → HOLD=OFF`；HOLD 打开时停止会挂音，也会污染下一次录音。
+5. **事件上限**：4 轨 16 分在 32 小节约 4096 个事件，通常够；4 轨 32 分或大量 CC/PB 会到 8192。
+
+> 上述 note-off 量化修复在 **v1.0.1 候选**（main）中，尚未重新发版；验证通过后发 `v1.0.1`。
 
 ---
 
@@ -275,7 +288,7 @@ test_loop.exe
 
 - **[设计评估](docs/设计评估.md)**：可行性、4 个必须先定的语义、容量测算、风险与里程碑。
 - **UI 规格**：版式常量见 `web/app.js` 与 `firmware/src/ui.cpp`（两边一一对应）。
-- **发布说明**：本 README 即 v0.1 说明。
+- **发布说明**：[RELEASE_NOTES.md](RELEASE_NOTES.md)。
 
 ## 12. 许可
 
