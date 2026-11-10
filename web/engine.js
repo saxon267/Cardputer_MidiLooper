@@ -308,6 +308,50 @@
       this.resetLastOn();
     }
 
+    clearLane(lane) {
+      if (lane < 0 || lane >= 4) return false;
+      let removed = false;
+      const keep = e => laneOfChannel(e.ch) !== lane;
+
+      if (this.state === State.REC && this.overdub) {
+        const before = this.active.length;
+        this.active = this.active.filter(keep);
+        if (this.active.length !== before) removed = true;
+        const tBefore = this.take.length;
+        this.take = this.take.filter(keep);
+        if (this.take.length !== tBefore) removed = true;
+        this.idx = this.lowerBound(this.active, this.phaseTick);
+        if (this.active.length === 0 && this.take.length === 0) {
+          this.state = State.STOP;
+          this.overdub = false;
+          this.phaseQ16 = 0;
+          this.phaseTick = 0;
+          this.idx = 0;
+        }
+      } else if (this.state === State.REC) {
+        const before = this.inactive.length;
+        this.inactive = this.inactive.filter(keep);
+        if (this.inactive.length !== before) removed = true;
+      } else {
+        const before = this.active.length;
+        this.active = this.active.filter(keep);
+        if (this.active.length !== before) removed = true;
+        if (removed) {
+          this.idx = this.lowerBound(this.active, this.phaseTick);
+          if (this.active.length === 0) {
+            this.state = State.STOP;
+            this.phaseQ16 = 0;
+            this.phaseTick = 0;
+            this.idx = 0;
+            this.startPulse = false;
+          }
+        }
+      }
+
+      if (removed) this.undoStack = [];
+      return removed;
+    }
+
     service(nowMs = this.nowMs) {
       if (this.state === State.ARMED) {
         if (nowMs - this.armMs > 20000) {

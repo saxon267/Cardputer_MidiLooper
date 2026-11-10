@@ -395,6 +395,22 @@
       eq(e.count(), 1);
     });
 
+    test('clear lane removes only the selected track', () => {
+      const e = fresh(1, 1200);
+      e.setQuantize(QuantizeGrid.OFF);
+      e.startFirst();
+      e.onMidi(0x90, 60, 100, 0);          // CH1
+      e.onMidi(0x91, 64, 100, 500000);     // CH2 at 480
+      e.stopRecord();
+      eq(e.count(), 2);
+
+      assert(e.clearLane(0), 'clear CH1');
+      eq(e.count(), 1);
+      eq(e.events[0].ch, 1);
+      assert(!e.clearLane(0), 'CH1 now empty');
+      assert(e.hasLoop(), 'CH2 remains');
+    });
+
     return results;
   }
 

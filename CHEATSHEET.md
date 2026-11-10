@@ -8,6 +8,7 @@
 | `Enter` | 播放 / 停止 |
 | `S` | 保存 `/MidiLoop/LOOP_xxxx.MID` |
 | `C` | 清空当前轨道（不删除 `.mid` 文件） |
+| `Fn` + `C` | 只清空当前选中的 lane（CH1/2/3/10） |
 | `U` | 撤销最后一次叠录（叠录中 = 取消当前 take） |
 | `L` | Loop 模式：到循环末尾自动续录（不用再按 R） |
 | `Fn` + `1..4` | Mute / Unmute CH1 / CH2 / CH3 / CH10 |

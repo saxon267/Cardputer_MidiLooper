@@ -213,6 +213,30 @@ static void testLoopMode()
     CHECK(e.state() == LoopState::PLAY);
 }
 
+static void testClearLane()
+{
+    LoopEngine e;
+    resetEngine(e, 1, 1200);
+    e.setQuantize(Q_OFF);
+
+    CHECK(e.startFirst());
+    g_test_us = 0;
+    noteOn(e, 0, 60, 100);
+    g_test_us = 500000;
+    noteOn(e, 1, 64, 100);
+    e.stopRecord();
+    CHECK(e.count() == 2);
+
+    CHECK(e.clearLane(0));
+    CHECK(e.count() == 1);
+    CHECK(e.events()[0].ch == 1);
+    CHECK(!e.clearLane(0));
+
+    CHECK(e.clearLane(1));
+    CHECK(e.count() == 0);
+    CHECK(e.state() == LoopState::STOP);
+}
+
 static void testClearAndStop()
 {
     LoopEngine e;
@@ -535,6 +559,7 @@ int main()
     testMute();
     testLoad();
     testLoopMode();
+    testClearLane();
     testClearAndStop();
     testArmTimeout();
 

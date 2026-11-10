@@ -605,6 +605,13 @@
     if (k === 'r' || k === 'R' || k === ' ') { e.preventDefault(); startRec(); return; }
     if (k === 'Enter') { e.preventDefault(); togglePlay(); return; }
     if (k === 's' || k === 'S') { save(); return; }
+    if ((k === 'c' || k === 'C') && e.shiftKey) {
+      const lane = state.selectedLane;
+      const ok = engine.clearLane(lane);
+      syncFromEngine();
+      toast(ok ? ('CH' + [1, 2, 3, 10][lane] + ' CLEARED') : 'TRACK EMPTY');
+      return;
+    }
     if (k === 'c' || k === 'C') {
       demoNotes.length = 0;
       engine.clear();

@@ -52,6 +52,7 @@ public:
     bool play();
     void stop();
     void clear();
+    bool clearLane(uint8_t lane);
     bool undo();
     void service();                 // main task: finish auto-stop / arm timeout
 

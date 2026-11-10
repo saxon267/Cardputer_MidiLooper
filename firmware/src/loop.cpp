@@ -287,6 +287,74 @@ void LoopEngine::clear()
     portEXIT_CRITICAL(&_mux);
 }
 
+bool LoopEngine::clearLane(uint8_t lane)
+{
+    if (lane >= 4) return false;
+
+    bool removed = false;
+    portENTER_CRITICAL(&_mux);
+
+    if (_state == LoopState::REC && _overdub) {
+        int w = 0;
+        for (int i = 0; i < _activeN; ++i) {
+            if (laneOfChannel(_active[i].ch) == lane) removed = true;
+            else _inactive[w++] = _active[i];
+        }
+        if (removed) {
+            _inactiveN = w;
+            swapBuffers();
+            _idx = lowerBound(_active, _activeN, _phaseTick);
+            __sync_synchronize();
+            ++_activeGen;
+        }
+
+        int t = 0;
+        for (int i = 0; i < _takeN; ++i) {
+            if (laneOfChannel(_take[i].ch) == lane) removed = true;
+            else _take[t++] = _take[i];
+        }
+        _takeN = t;
+
+        if (_activeN == 0 && _takeN == 0) {
+            _state = LoopState::STOP;
+            _overdub = false;
+            _phaseQ16 = _phaseTick = 0;
+            _idx = 0;
+        }
+    } else if (_state == LoopState::REC) {
+        int w = 0;
+        for (int i = 0; i < _inactiveN; ++i) {
+            if (laneOfChannel(_inactive[i].ch) == lane) removed = true;
+            else _inactive[w++] = _inactive[i];
+        }
+        _inactiveN = w;
+    } else {
+        int w = 0;
+        for (int i = 0; i < _activeN; ++i) {
+            if (laneOfChannel(_active[i].ch) == lane) removed = true;
+            else _inactive[w++] = _active[i];
+        }
+        if (removed) {
+            _inactiveN = w;
+            swapBuffers();
+            if (_activeN == 0) {
+                _state = LoopState::STOP;
+                _phaseQ16 = _phaseTick = 0;
+                _idx = 0;
+                _startPulse = false;
+            } else {
+                _idx = lowerBound(_active, _activeN, _phaseTick);
+            }
+            __sync_synchronize();
+            ++_activeGen;
+        }
+    }
+
+    if (removed) _undoTop = 0;
+    portEXIT_CRITICAL(&_mux);
+    return removed;
+}
+
 bool LoopEngine::loadCommit(int n, uint16_t bars)
 {
     if (n <= 0 || n > MAX_LOOP_EVENTS) return false;

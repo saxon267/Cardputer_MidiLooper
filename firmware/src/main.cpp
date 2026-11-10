@@ -214,6 +214,24 @@ static void deleteSelected()
 // ---------------------------------------------------------------- load / mute
 static const uint8_t kLaneCh[4] = {0, 1, 2, 9};
 
+static void clearSelectedLane()
+{
+    const uint8_t lane = app.selectedLane;
+    if (looper.state() == LoopState::STOP && !looper.hasLoop()) {
+        setToast("NO LOOP");
+        return;
+    }
+    if (!looper.clearLane(lane)) {
+        setToast("TRACK EMPTY");
+        return;
+    }
+    usbMidi.allNotesOff(kLaneCh[lane]);
+    syncApp();
+    char b[20];
+    snprintf(b, sizeof(b), "CH%d CLEARED", lane == 3 ? 10 : (int)lane + 1);
+    setToast(b);
+}
+
 static void toggleLaneMute(uint8_t lane)
 {
     if (lane > 3) return;
@@ -446,7 +464,7 @@ static void handleKeys()
     static bool pUp = false, pDown = false, pLeft = false, pRight = false;
     static bool pR = false, pS = false, pM = false, pG = false, pC = false;
     static bool pD = false, pN = false, pMinus = false, pPlus = false, pU = false, pL = false;
-    static bool pD1 = false, pD2 = false, pD3 = false, pD4 = false;
+    static bool pD1 = false, pD2 = false, pD3 = false, pD4 = false, pFnC = false;
 
     const bool enter = ks.enter;
     const bool space = ks.space;
@@ -460,7 +478,9 @@ static void handleKeys()
     const bool skey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('s');
     const bool mkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('m');
     const bool gkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('g');
-    const bool ckey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('c');
+    const bool craw  = M5Cardputer.Keyboard.isKeyPressed('c');
+    const bool ckey  = !ks.fn && craw;
+    const bool fnC   = ks.fn && craw;
     const bool dkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('d');
     const bool nkey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('n');
     const bool ukey  = !ks.fn && M5Cardputer.Keyboard.isKeyPressed('u');
@@ -485,6 +505,7 @@ static void handleKeys()
     const bool eM = mkey && !pM;
     const bool eG = gkey && !pG;
     const bool eC = ckey && !pC;
+    const bool eFnC = fnC && !pFnC;
     const bool eD = dkey && !pD;
     const bool eN = nkey && !pN;
     const bool eU = ukey && !pU;
@@ -499,6 +520,7 @@ static void handleKeys()
     pEnter = enter; pSpace = space; pDel = del; pTab = tab;
     pUp = up; pDown = down; pLeft = left; pRight = right;
     pR = rkey; pS = skey; pM = mkey; pG = gkey; pC = ckey;
+    pFnC = fnC;
     pD = dkey; pN = nkey; pMinus = minus; pPlus = plus; pU = ukey;
     pL = lkey;
     pD1 = d1; pD2 = d2; pD3 = d3; pD4 = d4;
@@ -575,6 +597,7 @@ static void handleKeys()
         if (eEnter) togglePlay();
         if (eS) saveLoop();
         if (eC) clearLoop();
+        if (eFnC) clearSelectedLane();
         if (eM) toggleClick();
         if (eL) toggleLoopMode();
         if (eU) {
