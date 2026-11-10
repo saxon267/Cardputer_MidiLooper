@@ -1,18 +1,19 @@
-# MidiLooper v1.3.1
+# MidiLooper v1.3.2
 
-**Cardputer-Adv 四通道 MIDI 循环叠录固件。** v1.3.1 正式发布。
+**Cardputer-Adv 四通道 MIDI 循环叠录固件。** v1.3.2 正式发布。
 
-## 本版更新（相对 v1.2.0）
+## 本版更新（相对 v1.3.1）
 
-- **`Fn+C` 单轨清空**：只删除当前选中 lane 的 MIDI，其他 lane、loop 长度、Mute 状态和 `.mid` 文件都不变。录音中同时清 active 与当前 take。
-- **恢复 `L` 的 Loop 模式启动功能**：
-  - `L` 开启即开始：没有循环先 `ARMED`，已有循环直接 `OVERDUB`；
-  - 到循环末尾自动续录，不需要反复按 `R`；
-  - `L` 关闭即结束当前 take；
-  - Loop 录音/ARMED 中按 `R` = 关闭 Loop 模式并停止，避免两个键抢状态；
-  - 非 Loop 模式 `R` 仍是普通录音/叠录。
-- **启动页**：显示 **`v1.3.1`**，停留 **1.5 秒**。
-- 之前 v1.2.0 的 Loop 模式、录制闪动、Quantize note-off 丢音修复全部保留。
+- **修复 Loop 模式残留导致“无法录音”**：
+  - 启动时如果没有已存在的 loop，不再从 NVS 恢复 Loop 模式；
+  - 避免开机后按 `L` 反而把 Loop 模式关掉；
+  - 避免看起来按键没反应。
+- **修复首音等待被 R 取消**：
+  - Loop 模式 `ARMED` 时按 `R` 只提示 `PLAY A NOTE`，不会取消等待首音；
+  - Loop 模式 `REC` 时按 `R` 才关闭 Loop 模式并停止当前 take。
+- 保留 `L` 开启即开始（无循环先 ARM，有循环直接 overdub）。
+- 保留 `Fn+C` 单轨清空。
+- 启动页：`v1.3.2`，停留 1.5 秒。
 
 ## 功能
 
@@ -36,13 +37,13 @@
 用 **M5 Apps Installer → SD Card** 安装：
 
 ```text
-CardputerLooper-v1.3.1-app.bin
+CardputerLooper-v1.3.2-app.bin
 ```
 
 或进下载模式后只写 CardputerLooper 分区。当前这台 M5 Apps 分区表里它是：
 
 ```bash
-esptool.py --chip esp32s3 -p COMx -b 460800 write_flash 0x5A0000 CardputerLooper-v1.3.1-app.bin
+esptool.py --chip esp32s3 -p COMx -b 460800 write_flash 0x5A0000 CardputerLooper-v1.3.2-app.bin
 ```
 
 **不要写 `0x1B0000`**：M5 Apps 安装多个 app 后，那里现在是 `CardputerWaveL`。分区偏移可能随安装变化，优先用 M5 Apps Installer。
@@ -62,8 +63,8 @@ esptool.py --chip esp32s3 -p COMx -b 460800 write_flash 0x0 CardputerLooper-8MB.
 - **Web 模型**：`web/test.html` / `node web/test/run-node.js`，18/18 `ALL PASS`。
 - **交互 smoke**：`pwsh tools/web-smoke.ps1`（headless Edge + CDP），24/24 通过。
 - **C++ host**：`test_loop.cpp` 18/18 `RESULT OK`；`test_store.cpp` SMF write→load 往返通过。
-- **构建**：RAM 210,116 B（64.1%），Flash 681,737 B（21.7%）。
-- **启动版本**：`v1.3.1`，1.5 s。
+- **构建**：RAM 210,116 B（64.1%），Flash 681,797 B（21.7%）。
+- **启动版本**：`v1.3.2`，1.5 s。
 
 ## 已知限制
 
@@ -80,6 +81,6 @@ esptool.py --chip esp32s3 -p COMx -b 460800 write_flash 0x0 CardputerLooper-8MB.
 ## SHA-256
 
 ```text
-b116070bb340faaebbec9b3d5a1da9ac02ba945ccfc5dffe70eda53bd744f903  CardputerLooper-8MB.bin
-818c20cf42550bb86b9aecac5ba9555cc12d2a9e652e521a4f0103788529ba35  CardputerLooper-v1.3.1-app.bin
+3e40ec7534182b9dddecb05a309a2e131fb68b853bce4b626db67a505ebcd17f  CardputerLooper-8MB.bin
+693622e45a0e1471c70e06354cbab076651814e587bab9843190e28a8a4b81e6  CardputerLooper-v1.3.2-app.bin
 ```

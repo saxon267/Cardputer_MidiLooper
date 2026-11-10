@@ -1,2 +1,2 @@
-b116070bb340faaebbec9b3d5a1da9ac02ba945ccfc5dffe70eda53bd744f903  CardputerLooper-8MB.bin
-818c20cf42550bb86b9aecac5ba9555cc12d2a9e652e521a4f0103788529ba35  CardputerLooper-v1.3.1-app.bin
+3e40ec7534182b9dddecb05a309a2e131fb68b853bce4b626db67a505ebcd17f  CardputerLooper-8MB.bin
+693622e45a0e1471c70e06354cbab076651814e587bab9843190e28a8a4b81e6  CardputerLooper-v1.3.2-app.bin
