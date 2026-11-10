@@ -2,8 +2,8 @@
 
 240×135、Gruvbox Dark 的四通道 MIDI 循环叠录固件。Cardputer-Adv 作为 **USB-C Host** 直连 M-VAVE FM-1（Sloop），把 FM-1 的 CH1/2/3/10 录成循环，叠录后回放给 FM-1 发声。
 
-> **状态**：**v1.2.0 已发布**；main 上的 **v1.3.1** 增加 `Fn+C` 单轨清空并恢复 `L` 直接启动录音，尚未发版。  
-> **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.2.0>
+> **状态**：**v1.3.1 已发布**；新增 `Fn+C` 单轨清空，并恢复 `L` 直接启动 Loop 录音。  
+> **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.3.1>
 
 ![LOOP 播放](docs/ui/loop-play.png)
 
@@ -263,7 +263,7 @@ test_loop.exe
 
 `test/host/Arduino.h` 和 `test/host/SD.h` 是 host stub（`millis`/`micros`/`portMUX` 空实现、内存 SD），**不测试** USB、ES8311 和真机时序；同一组场景的 Web 版本见第 3.1 节。
 
-## 10. 已知限制（v1.2.0）
+## 10. 已知限制（v1.3.1）
 
 1. **USB Host 已上机确认**；不同 FM-1 批次/描述符仍可能有枚举差异，换设备时先看顶栏 USB 状态。
 2. **不同步 FM-1 sequencer 的小节相位**：不解析 FA/FB/FC；只支持内部 BPM 为主。要同步需后续加 transport + Sloop 外部时钟。
@@ -288,7 +288,7 @@ test_loop.exe
 4. **Sloop**：`OUT=SEQ`、`ARP 2 → HOLD=OFF`；HOLD 打开时停止会挂音，也会污染下一次录音。
 5. **事件上限**：4 轨 16 分在 32 小节约 4096 个事件，通常够；4 轨 32 分或大量 CC/PB 会到 8192。
 
-> Quantize note-off 修复已包含在 **v1.2.0** 正式版中。
+> Quantize note-off 修复已包含在 **v1.3.1** 正式版中。
 
 ---
 
