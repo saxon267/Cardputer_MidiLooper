@@ -121,10 +121,13 @@ static bool startFirstTake()
 
 static void toggleRecord()
 {
-    if (looper.loopMode() &&
-        (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED)) {
-        // In Loop mode L owns the transport; R acts as stop/exit instead of
-        // cancelling or starting a second take.
+    if (looper.loopMode() && looper.state() == LoopState::ARMED) {
+        // Do not let a habitual R press cancel the first-note arming.
+        setToast("PLAY A NOTE");
+        return;
+    }
+    if (looper.loopMode() && looper.state() == LoopState::REC) {
+        // In Loop mode L owns the transport; R acts as stop/exit.
         looper.setLoopMode(false);
         prefs.putBool("loop", false);
         looper.stopRecord();
@@ -772,6 +775,7 @@ void setup()
     looper.setBpm(app.bpmX10);
     looper.setQuantize(app.quantize);
     looper.setSwing(app.swing);
+    if (!looper.hasLoop()) app.loopMode = false;
     looper.setLoopMode(app.loopMode);
     looper.setSink(emitEvent);
 

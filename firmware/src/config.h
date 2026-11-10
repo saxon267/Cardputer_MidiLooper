@@ -61,4 +61,4 @@ static constexpr int BOT_Y = SCR_H - BOT_H;
 #define C_RED     RGB565(251, 73, 52)    // #FB4934
 #define C_GREEN   RGB565(184, 187, 38)   // #B8BB26
 
-#define APP_VERSION "1.3.1"
+#define APP_VERSION "1.3.2"

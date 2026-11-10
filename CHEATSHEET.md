@@ -11,7 +11,8 @@
 | `Fn` + `C` | 只清空当前选中的 lane（CH1/2/3/10） |
 | `U` | 撤销最后一次叠录（叠录中 = 取消当前 take） |
 | `L` | Loop 模式：开启即开始录音（无循环先 ARM，有循环直接 overdub），关闭即结束 |
-| `R`（Loop 录音中） | 关闭 Loop 模式并停止当前 take |
+| `R`（Loop ARMED） | 提示 `PLAY A NOTE`，不会取消等待首音 |
+| `R`（Loop REC） | 关闭 Loop 模式并停止当前 take |
 | `Fn` + `1..4` | Mute / Unmute CH1 / CH2 / CH3 / CH10 |
 | `M` | 节拍器开 / 关 |
 | `G` | 设置浮层 |
