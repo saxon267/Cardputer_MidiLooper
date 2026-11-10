@@ -2,7 +2,7 @@
 
 240×135、Gruvbox Dark 的四通道 MIDI 循环叠录固件。Cardputer-Adv 作为 **USB-C Host** 直连 M-VAVE FM-1（Sloop），把 FM-1 的 CH1/2/3/10 录成循环，叠录后回放给 FM-1 发声。
 
-> **状态**：**v1.2.0 已发布**；main 上的 **v1.3.0** 增加 `Fn+C` 单轨清空，尚未发版。  
+> **状态**：**v1.2.0 已发布**；main 上的 **v1.3.1** 增加 `Fn+C` 单轨清空并恢复 `L` 直接启动录音，尚未发版。  
 > **Release：** <https://github.com/saxon267/Cardputer_MidiLooper/releases/tag/v1.2.0>
 
 ![LOOP 播放](docs/ui/loop-play.png)
@@ -19,7 +19,7 @@
 | Quantize | `onMidi()` 入口把 note-on / CC / PB 的 tick 吸附到网格（默认 1/16）；note-off 保留原始时长 |
 | Swing | 50–75%；播放时对奇数 8 分格的事件动态加 tick 偏移，不改存储 |
 | Undo | `U` 撤销最后一次叠录；按 take generation 过滤，不会误删旧事件 |
-| Loop 模式 | `L` 开启/关闭；第一遍结束后自动进入下一遍 overdub，不用再按 `R` |
+| Loop 模式 | `L` 开启即开始（无循环先 ARM，有循环直接 overdub）；`L` 关闭即结束，`R` 在 Loop 录音中作为停止/退出 |
 | 单轨清空 | `Fn` + `C` 只清当前选中 lane 的 MIDI，其他 lane 保留 |
 | 录制闪动 | `REC` / `OVERDUB` 时，收到音符的 lane 行随节奏闪动 |
 | 文件播放 | FILE 页 `Enter` 载入 `/MidiLoop` 里的 `.mid`，按文件 tempo/bars 播放 |
@@ -30,7 +30,7 @@
 | 保存 | `S` → `/MidiLoop/LOOP_xxxx.MID`，SMF Format 0、480 PPQN、EOT 在循环末尾 |
 | 文件管理 | `FILE` 页删除 / 改名；只显示 `.mid` / `.midi` |
 | 设置 | BPM、小节、Quantize、Swing、click、count-in；NVS 保存 |
-| UI | 两个标签页 LOOP / FILE + 设置浮层；240×135 sprite；启动页显示 `v1.3.0` 并停留 1.5 s |
+| UI | 两个标签页 LOOP / FILE + 设置浮层；240×135 sprite；启动页显示 `v1.3.1` 并停留 1.5 s |
 
 事件类型：Note On/Off、CC64 延音、CC1 调制、Pitch Bend。**不发送** Program Change。
 
@@ -115,7 +115,7 @@ node web/test/run-node.js
 | `C` | 清空整个 loop（所有 lane，**不删除** `.mid` 文件） |
 | `Fn` + `C` | 只清空当前选中的 lane（CH1/2/3/10） |
 | `U` | 撤销最后一次叠录（叠录中按 U 取消当前 take） |
-| `L` | Loop 模式开 / 关（自动续录，不用反复按 R） |
+| `L` | Loop 模式开 / 关；开启即开始录音，关闭即结束 |
 | `Fn` + `1` / `2` / `3` / `4` | Mute / Unmute CH1 / CH2 / CH3 / CH10 |
 | `M` | 节拍器开 / 关 |
 | `G` | 打开设置浮层 |
@@ -166,7 +166,7 @@ node web/test/run-node.js
 11. **Undo**：每次进入叠录取一个 take generation；`U` 过滤掉该 generation 的事件。因为叠录是排序合并，不能简单按数量截断，否则会误删旧事件。
 12. **文件播放**：FILE 页 `Enter` 读取 SMF（Format 0/1、480 PPQN 转换、tempo、EOT），载入 inactive buffer 后提交并播放；`C` 只清 RAM 轨道，`.mid` 文件保留。
 13. **Mute**：`Fn` + `1..4` 切换；pump 跳过该 lane 的事件，并在静音瞬间对该通道发 `allNotesOff`，避免正在响的音挂住。Mute 只影响回放，保存仍包含全部事件。
-14. **Loop 模式**：`L` 只切换自动续录（NVS 保存），不改变当前走带；第一遍仍用 `R` 启动。开启后每次到循环末尾自动进入下一遍 overdub，不需要再按 `R`；手动 `R` 结束当前 take 后不会自动续录。`L` 关闭只停止自动续录，不打断当前 take。事件满时不会继续自动续录。
+14. **Loop 模式**：`L` 开关（NVS 保存）。按 `L` 开启：没有循环直接 `ARMED`（有 count-in 就倒计时），已有循环直接进入 overdub，**不需要按 `R`**；之后每到循环末尾自动续录。再按 `L` 关闭会结束当前 take。Loop 模式录音/ARMED 时按 `R` 等价于关闭 Loop 模式并停止，避免和 `L` 抢状态；Loop 模式停止后 `R` 仍可正常手动录音。
 15. **录制闪动**：`REC` / `OVERDUB` 中收到 note-on 时，对应 lane 行闪 90 ms；UI 以 30 fps 渲染，闪动跟随输入音符的节奏。
 16. **单轨清空**：`Fn` + `C` 只删除当前选中 lane 的事件，其他 lane、loop 长度、文件和 mute 状态不变；正在录音时会同时清掉该 lane 的 active 与当前 take。清空后该 lane 没有事件时提示 `TRACK EMPTY`。
 
@@ -227,7 +227,7 @@ firmware/src/
 | 项 | 值 |
 |---|---:|
 | 静态 RAM | 210,116 B / 327,680 B（64.1%） |
-| Flash | 681,161 B / 3,145,728 B（21.7%） |
+| Flash | 681,737 B / 3,145,728 B（21.7%） |
 | 循环事件 | 2 × 8192 × 8 B + 4096 × 8 B = 160 KB |
 | UI sprite | 240 × 135 × 16 bpp = 64.8 KB（堆） |
 | 音频 | 44.1 kHz / 64 帧块 / 6 DMA |

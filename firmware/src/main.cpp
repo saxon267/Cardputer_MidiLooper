@@ -121,6 +121,19 @@ static bool startFirstTake()
 
 static void toggleRecord()
 {
+    if (looper.loopMode() &&
+        (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED)) {
+        // In Loop mode L owns the transport; R acts as stop/exit instead of
+        // cancelling or starting a second take.
+        looper.setLoopMode(false);
+        prefs.putBool("loop", false);
+        looper.stopRecord();
+        usbMidi.panic();
+        app.countInLeft = 0;
+        setToast("LOOP OFF");
+        return;
+    }
+
     if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
         looper.stopRecord();
         usbMidi.panic();
@@ -413,7 +426,31 @@ static void toggleLoopMode()
 {
     const bool on = looper.toggleLoopMode();
     prefs.putBool("loop", on);
-    setToast(on ? "LOOP MODE ON" : "LOOP MODE OFF");
+
+    if (!on) {
+        if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
+            looper.stopRecord();
+            usbMidi.panic();
+            app.countInLeft = 0;
+        }
+        setToast("LOOP OFF");
+        return;
+    }
+
+    if (looper.state() == LoopState::REC || looper.state() == LoopState::ARMED) {
+        setToast("LOOP REC");
+        return;
+    }
+    if (!app.usbConnected || !usbMidi.inputEndpoint()) {
+        setToast("LOOP ON");
+        return;
+    }
+    if (looper.hasLoop()) {
+        looper.startOverdub();
+        setToast("LOOP REC");
+    } else if (startFirstTake()) {
+        setToast("LOOP ARM");
+    }
 }
 
 static void cycleQuantize(int dir)
